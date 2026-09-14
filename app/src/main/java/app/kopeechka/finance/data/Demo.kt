@@ -1,38 +1,59 @@
 package app.kopeechka.finance.data
 
 import java.time.LocalDate
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 object Demo {
 
-    /** Стандартные категории на языке интерфейса. Лимиты в долларах — базе курсов. */
-    fun categories(l: Lang) = listOf(
-        Category("food", l.t("demo.code.food"), l.t("demo.cat.food"), 260.0, color = "#4F7A5B"),
-        Category("home", l.t("demo.code.home"), l.t("demo.cat.home"), 370.0, color = "#2C455D"),
-        Category("transport", l.t("demo.code.transport"), l.t("demo.cat.transport"), 65.0, color = "#597EA3"),
-        Category("cafe", l.t("demo.code.cafe"), l.t("demo.cat.cafe"), 98.0, color = "#B08A4F"),
-        Category("fun", l.t("demo.code.fun"), l.t("demo.cat.fun"), 76.0, color = "#8A3B5B"),
-        Category("health", l.t("demo.code.health"), l.t("demo.cat.health"), 54.0, color = "#3E8E8A"),
-        Category("clothes", l.t("demo.code.clothes"), l.t("demo.cat.clothes"), 65.0, color = "#A9762F"),
-        Category("other", l.t("demo.code.other"), l.t("demo.cat.other"), 43.0, color = "#5D5D60"),
-        Category("income", l.t("demo.code.salary"), l.t("demo.cat.salary"), income = true, color = "#416180"),
-        Category("side", l.t("demo.code.side"), l.t("demo.cat.side"), income = true, color = "#6B4E8A"),
+    /** Лимиты категорий заданы в долларах и переводятся в основную валюту профиля. */
+    private val LIMITS_USD = mapOf(
+        "food" to 260.0, "home" to 370.0, "transport" to 65.0, "cafe" to 98.0,
+        "fun" to 76.0, "health" to 54.0, "clothes" to 65.0, "other" to 43.0,
     )
+
+    /** Стандартные категории на языке интерфейса; лимиты — в основной валюте. */
+    fun categories(l: Lang, cur: String): List<Category> {
+        fun limit(key: String): Double {
+            val v = (LIMITS_USD[key] ?: 0.0) * Currencies.hintRate("USD", cur)
+            return if (abs(v) >= 100) (v / 10).roundToLong() * 10.0 else v.roundToLong().toDouble()
+        }
+        return listOf(
+            Category("food", l.t("demo.code.food"), l.t("demo.cat.food"), limit("food"), color = "#4F7A5B"),
+            Category("home", l.t("demo.code.home"), l.t("demo.cat.home"), limit("home"), color = "#2C455D"),
+            Category("transport", l.t("demo.code.transport"), l.t("demo.cat.transport"), limit("transport"), color = "#597EA3"),
+            Category("cafe", l.t("demo.code.cafe"), l.t("demo.cat.cafe"), limit("cafe"), color = "#B08A4F"),
+            Category("fun", l.t("demo.code.fun"), l.t("demo.cat.fun"), limit("fun"), color = "#8A3B5B"),
+            Category("health", l.t("demo.code.health"), l.t("demo.cat.health"), limit("health"), color = "#3E8E8A"),
+            Category("clothes", l.t("demo.code.clothes"), l.t("demo.cat.clothes"), limit("clothes"), color = "#A9762F"),
+            Category("other", l.t("demo.code.other"), l.t("demo.cat.other"), limit("other"), color = "#5D5D60"),
+            Category("income", l.t("demo.code.salary"), l.t("demo.cat.salary"), income = true, color = "#416180"),
+            Category("side", l.t("demo.code.side"), l.t("demo.cat.side"), income = true, color = "#6B4E8A"),
+        )
+    }
+
+    /** Курсы по умолчанию относительно выбранной основной валюты. */
+    fun rates(cur: String): Map<String, Double> =
+        (Currencies.DEFAULT_CODES + cur).distinct().associateWith { Currencies.hintRate(it, cur) } + (cur to 1.0)
 
     /** Пустые данные: один счёт и стандартные категории. */
     fun empty(settings: Settings = Settings()): AppData {
         val l = Lang.of(settings.lang)
         val cur = settings.mainCur
         return AppData(
+            version = Currencies.DATA_VERSION,
             accounts = listOf(Account("card", l.t("acc.type.card"), l.t("acc.type.card"), "", cur, 0.0)),
-            categories = categories(l),
-            settings = settings,
+            categories = categories(l, cur),
+            settings = settings.copy(
+                rates = rates(cur) + settings.rates.filterKeys { it != cur },
+                currencyCodes = (listOf(cur) + settings.currencyCodes).distinct(),
+            ),
         )
     }
 
     private data class Seed(val d: Int, val titleKey: String, val cat: String, val acc: String, val rub: Double)
 
-    /** Суммы демо заданы в рублях и переводятся в валюту языка по курсу из настроек. */
+    /** Суммы демо заданы в рублях и переводятся в валюту профиля по ориентировочному курсу. */
     private val SEED = listOf(
         Seed(0, "demo.tx.grocery1", "food", "card", -1840.0),
         Seed(0, "demo.tx.metro", "transport", "cash", -62.0),
@@ -44,7 +65,7 @@ object Demo {
         Seed(2, "demo.tx.cinema", "fun", "card", -1100.0),
         Seed(3, "demo.tx.grocery2", "food", "card", -3210.0),
         Seed(3, "demo.tx.internet", "home", "card", -700.0),
-        Seed(4, "demo.tx.freelance", "side", "save", -0.0 + 17480.0),
+        Seed(4, "demo.tx.freelance", "side", "save", 17480.0),
         Seed(4, "demo.tx.gym", "health", "card", -2400.0),
         Seed(5, "demo.tx.grocery3", "food", "card", -5380.0),
         Seed(5, "demo.tx.bar", "cafe", "card", -2650.0),
@@ -73,16 +94,13 @@ object Demo {
         Seed(163, "demo.tx.doctor", "health", "card", -5400.0),
     )
 
-    fun create(l: Lang = Lang.RU, today: LocalDate = LocalDate.now()): AppData {
-        val cur = l.t("demo.cur")
-        val rubInUsd = Currencies.DEFAULT_RATES["RUB"] ?: 0.0109
-        val rate = Currencies.DEFAULT_RATES[cur] ?: 1.0
-        // суммы заданы в рублях: переводим в валюту демо и округляем до «круглого» значения
+    fun create(l: Lang = Lang.RU, cur: String = l.t("demo.cur"), today: LocalDate = LocalDate.now()): AppData {
+        val k = Currencies.hintRate("RUB", cur)
         fun money(rub: Double): Double {
-            val v = rub * rubInUsd / rate
+            val v = rub * k
             return when {
-                kotlin.math.abs(v) >= 1000 -> (v / 10).roundToLong() * 10.0
-                kotlin.math.abs(v) >= 100 -> v.roundToLong().toDouble()
+                abs(v) >= 1000 -> (v / 10).roundToLong() * 10.0
+                abs(v) >= 100 -> v.roundToLong().toDouble()
                 else -> (v * 10).roundToLong() / 10.0
             }
         }
@@ -113,11 +131,17 @@ object Demo {
         )
 
         return AppData(
+            version = Currencies.DATA_VERSION,
             accounts = accounts,
-            categories = categories(l),
+            categories = categories(l, cur),
             txs = txs,
             goals = goals,
-            settings = Settings(mainCur = cur, lang = if (l.code == Lang.fromSystem().code) "auto" else l.code),
+            settings = Settings(
+                mainCur = cur,
+                lang = if (l.code == Lang.fromSystem().code) "auto" else l.code,
+                rates = rates(cur),
+                currencyCodes = (listOf(cur) + Currencies.DEFAULT_CODES).distinct(),
+            ),
             nextId = 1000,
         )
     }

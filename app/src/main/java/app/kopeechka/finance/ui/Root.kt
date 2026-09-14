@@ -190,14 +190,18 @@ private fun RowScope.NavItem(label: String, glyph: Glyph, on: Boolean, onClick: 
     }
 }
 
+/** Валюты, предлагаемые на последнем шаге заставки; остальные добавляются в настройках. */
+private val ONB_CURRENCIES = listOf("USD", "EUR", "RUB", "TMT", "KZT", "TRY", "AZN", "UZS")
+
 @Composable
 private fun Onboarding(vm: AppViewModel) {
     val c = T.c
     val l = T.l
-    val step = vm.onbStep.coerceIn(0, 2)
+    val step = vm.onbStep.coerceIn(0, 3)
+    val picked = vm.onbCurrency()
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-            (0..2).forEach { i ->
+            (0..3).forEach { i ->
                 Box(Modifier.width(if (i == step) 26.dp else 8.dp).height(4.dp).background(if (i == step) c.a300 else c.hairline))
             }
         }
@@ -209,24 +213,57 @@ private fun Onboarding(vm: AppViewModel) {
                 .blueprintMarks(c.onAccent.copy(alpha = 0.7f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(Currencies.sym(Currencies.BASE), style = T.h(30.sp, c.a300))
+            Text(Currencies.sym(picked), style = T.h(30.sp, c.a300), maxLines = 1)
         }
         Spacer(Modifier.height(22.dp))
-        Text(l.t("onb.${step + 1}.title"), style = T.h(38.sp, c.onAccent, (-0.01).em, 40.sp))
-        Spacer(Modifier.height(16.dp))
-        Text(l.t("onb.${step + 1}.body"), style = T.b(17.sp, c.a300, lineHeight = 25.sp))
+
+        if (step < 3) {
+            Text(l.t("onb.${step + 1}.title"), style = T.h(38.sp, c.onAccent, (-0.01).em, 40.sp))
+            Spacer(Modifier.height(16.dp))
+            Text(l.t("onb.${step + 1}.body"), style = T.b(17.sp, c.a300, lineHeight = 25.sp))
+        } else {
+            Text(l.t("onb.cur.title"), style = T.h(32.sp, c.onAccent, (-0.01).em, 34.sp))
+            Spacer(Modifier.height(12.dp))
+            Text(l.t("onb.cur.body"), style = T.b(15.sp, c.a300, lineHeight = 22.sp))
+            Spacer(Modifier.height(18.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ONB_CURRENCIES.chunked(4).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { code ->
+                            val on = code == picked
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .background(if (on) c.a300.copy(alpha = 0.2f) else Color.Transparent)
+                                    .hairline(if (on) c.a300 else c.hairline)
+                                    .tap { vm.onbCur = code }
+                                    .padding(vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(Currencies.sym(code), style = T.h(17.sp, c.onAccent), maxLines = 1)
+                                Text(code, style = T.b(9.5.sp, c.a300, 0.1.em), maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(l.t("onb.cur.more"), style = T.b(12.sp, c.a300))
+        }
+
         Spacer(Modifier.weight(1f))
-        PrimaryButton(if (step < 2) l.t("onb.next") else l.t("onb.start"), {
-            if (step < 2) vm.onbStep = step + 1 else vm.finishOnboarding()
+        PrimaryButton(if (step < 3) l.t("onb.next") else l.t("onb.start"), {
+            if (step < 3) vm.onbStep = step + 1 else vm.finishOnboarding()
         })
         Spacer(Modifier.height(10.dp))
         Text(
-            if (step < 2) l.t("onb.skip") else l.t("onb.clean"),
+            if (step < 3) l.t("onb.skip") else l.t("onb.clean"),
             style = T.h(14.sp, c.a300, 0.08.em),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .tap { if (step < 2) vm.onbStep = 2 else vm.startClean() }
+                .tap { if (step < 3) vm.onbStep = 3 else vm.startClean() }
                 .padding(12.dp),
         )
     }

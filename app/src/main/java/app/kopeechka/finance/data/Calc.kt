@@ -43,15 +43,16 @@ class Calc(
     val main = s.mainCur
     val todayDay = today.toEpochDay()
 
-    fun rate(c: String) = s.rates[c] ?: Currencies.RATE_HINTS[c] ?: 1.0
+    /** Курс: сколько единиц основной валюты стоит одна единица `c`. У основной всегда 1. */
+    fun rate(c: String): Double = if (c == main) 1.0 else s.rates[c] ?: Currencies.hintRate(c, main)
     fun conv(v: Double, from: String, to: String) = v * rate(from) / rate(to)
     fun toMain(v: Double, cur: String) = conv(v, cur, main)
     fun fmt(v: Double, cur: String) = Currencies.fmt(v, cur, s.showKopecks)
     fun fmtMain(v: Double) = fmt(v, main)
 
-    /** Валюты, включённые в настройках (RUB всегда первая — база курсов). */
+    /** Валюты, включённые в настройках; основная всегда первая — она же база курсов. */
     val currencies: List<String>
-        get() = (listOf(Currencies.BASE) + s.currencyCodes).distinct()
+        get() = (listOf(main) + s.currencyCodes).distinct()
 
     fun acc(id: String?) = d.accounts.firstOrNull { it.id == id }
     fun cat(id: String): Category = when (id) {
@@ -92,7 +93,8 @@ class Calc(
         return m
     }
 
-    fun limitMain(c: Category) = toMain(c.limitBase, Currencies.BASE)
+    /** Лимиты хранятся в основной валюте, поэтому пересчёт не нужен. */
+    fun limitMain(c: Category) = c.limitBase
     val limitTotal by lazy { d.categories.filter { !it.income }.sumOf { limitMain(it) } }
     val budgets: List<BudgetRow> by lazy {
         val sp = spentBy(monthTx)

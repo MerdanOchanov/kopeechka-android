@@ -356,7 +356,10 @@ fun CurrencyPickerOverlay(vm: AppViewModel, c: Calc) {
                     }
                     Column(Modifier.weight(1f)) {
                         Text(info.name.replaceFirstChar { it.uppercase() }, style = T.b(14.sp, col.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(l.t("cur.approxRate", info.code, fmtRate(Currencies.defaultRate(info.code))), style = T.b(11.sp, col.n600))
+                        Text(
+                            l.t("cur.approxRate", info.code, fmtRate(Currencies.hintRate(info.code, c.main)), Currencies.sym(c.main)),
+                            style = T.b(11.sp, col.n600),
+                        )
                     }
                     Text(l.t("common.add"), style = T.h(12.sp, col.a700))
                 }
@@ -372,7 +375,13 @@ fun CurrencyPickerOverlay(vm: AppViewModel, c: Calc) {
             Field(l.t("cur.code"), draft.code, { vm.currencyDraft = draft.copy(code = it.uppercase()) }, placeholder = l.t("cur.codeHint"))
             Field(l.t("cur.sym"), draft.sym, { vm.currencyDraft = draft.copy(sym = it) }, placeholder = l.t("cur.symHint"))
             Field(l.t("cur.name"), draft.name, { vm.currencyDraft = draft.copy(name = it) }, placeholder = Currencies.info("TMT").name)
-            Field(l.t("cur.rate"), draft.rate, { vm.currencyDraft = draft.copy(rate = it) }, numeric = true, placeholder = "26,3")
+            Field(
+                l.t("cur.rate", c.main),
+                draft.rate,
+                { vm.currencyDraft = draft.copy(rate = it) },
+                numeric = true,
+                placeholder = fmtRate(Currencies.hintRate("TMT", c.main)),
+            )
             PrimaryButton(l.t("cur.add").removePrefix("+ "), { vm.saveCustomCurrency() })
         }
     }

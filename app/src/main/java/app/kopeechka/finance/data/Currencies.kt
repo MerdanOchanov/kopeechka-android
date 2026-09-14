@@ -35,11 +35,16 @@ object Currencies {
         val inName: String get() = if (lang.code == "ru") ruIn else name
     }
 
-    /** Базовая валюта курсов: 1 USD = 1. Все курсы — сколько долларов стоит единица валюты. */
-    const val BASE = "USD"
+    /**
+     * Базы с фиксированной валютой больше нет: курсы задаются относительно основной
+     * валюты пользователя (`settings.mainCur`), её собственный курс всегда 1.
+     * Таблица RATE_HINTS ниже хранится в долларах и служит только источником
+     * ориентировочных значений — см. [hintRate].
+     */
+    const val HINT_BASE = "USD"
 
-    /** Версия формата данных: 2 — курсы и лимиты в долларах (в 1 были в рублях). */
-    const val DATA_VERSION = 2
+    /** Версия формата: 3 — курсы и лимиты в основной валюте (1 — в рублях, 2 — в долларах). */
+    const val DATA_VERSION = 3
 
     /** Валюты, включённые в новом профиле. */
     val DEFAULT_CODES = listOf("USD", "RUB", "EUR", "KZT", "TMT")
@@ -164,10 +169,17 @@ object Currencies {
         buildFormats()
     }
 
+    /** Ориентировочный курс `code` в единицах валюты `main`. */
+    fun hintRate(code: String, main: String): Double {
+        val c = RATE_HINTS[code] ?: return 1.0
+        val m = RATE_HINTS[main]?.takeIf { it > 0 } ?: return c
+        return c / m
+    }
+
     fun info(code: String): Info = custom[code] ?: byCode[code] ?: Info(code, code, code, code, code, code)
     fun sym(code: String) = info(code).sym
     fun inCatalog(code: String) = byCode.containsKey(code)
-    fun defaultRate(code: String) = RATE_HINTS[code] ?: 1.0
+    fun defaultRate(code: String, main: String) = hintRate(code, main)
 
     /** Поиск по каталогу для экрана добавления валюты. */
     fun search(query: String, exclude: Set<String>): List<Info> {

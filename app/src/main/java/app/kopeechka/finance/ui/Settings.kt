@@ -238,11 +238,11 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
     val l = T.l
     ScreenColumn(gap = 16.dp) {
         PageHeader(l.t("cur.title")) { vm.page = null }
-        Muted(l.t("cur.note"), 11.5f, color = col.n700)
+        Muted(l.t("cur.note", Currencies.info(c.main).name), 11.5f, color = col.n700)
         Column {
             c.currencies.forEach { code ->
                 val info = Currencies.info(code)
-                val isBase = code == Currencies.BASE
+                val isBase = code == c.main
                 val used = c.d.accounts.count { it.cur == code } + c.d.goals.count { it.cur == code }
                 Column(Modifier.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -264,7 +264,7 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
                         if (isBase) {
                             Text(l.t("cur.base"), style = T.b(11.5.sp, col.n600))
                         } else {
-                            RateField(vm, code, c.rate(code))
+                            RateField(vm, code, c.rate(code), c.main)
                         }
                     }
                     if (!isBase && code != c.main && used == 0) {
@@ -282,14 +282,14 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
 }
 
 @Composable
-private fun RateField(vm: AppViewModel, code: String, rate: Double) {
+private fun RateField(vm: AppViewModel, code: String, rate: Double, mainCur: String) {
     val col = T.c
     var text by remember(code) { mutableStateOf(fmtRate(rate)) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.width(104.dp)) {
             Field(null, text, { text = it; vm.setRate(code, it) }, numeric = true, placeholder = "0")
         }
-        Text(Currencies.sym(Currencies.BASE), style = T.b(14.sp, col.n700))
+        Text(Currencies.sym(mainCur), style = T.b(14.sp, col.n700))
     }
 }
 

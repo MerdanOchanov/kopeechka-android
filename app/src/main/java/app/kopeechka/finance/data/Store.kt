@@ -50,14 +50,17 @@ class Store(context: Context) {
      */
     private fun migrate(d: AppData): AppData {
         if (d.version >= Currencies.DATA_VERSION) return d
-        val usdPerRub = 1.0 / (d.settings.rates["USD"]?.takeIf { it > 0 } ?: 92.0)
-        val rates = d.settings.rates.mapValues { (_, v) -> v * usdPerRub } + ("USD" to 1.0)
+        // В версиях 1 и 2 курсы и лимиты были в рубле и долларе соответственно.
+        // Теперь база — основная валюта пользователя: делим на её прежний курс.
+        val main = d.settings.mainCur
+        val div = d.settings.rates[main]?.takeIf { it > 0 } ?: 1.0
+        val rates = d.settings.rates.mapValues { (_, v) -> v / div } + (main to 1.0)
         return d.copy(
             version = Currencies.DATA_VERSION,
-            categories = d.categories.map { it.copy(limitBase = it.limitBase * usdPerRub) },
+            categories = d.categories.map { it.copy(limitBase = it.limitBase / div) },
             settings = d.settings.copy(
                 rates = rates,
-                currencyCodes = (listOf(Currencies.BASE) + d.settings.currencyCodes).distinct(),
+                currencyCodes = (listOf(main) + d.settings.currencyCodes).distinct(),
             ),
         )
     }
@@ -66,9 +69,12 @@ class Store(context: Context) {
         val f = file.baseFile
         if (f.exists()) {
             runCatching {
-                val d = migrate(json.decodeFromString(AppData.serializer(), String(file.readFully(), Charsets.UTF_8)))
+                val raw = json.decodeFromString(AppData.serializer(), String(file.readFully(), Charsets.UTF_8))
+                val d = migrate(raw)
                 Currencies.setLang(Lang.of(d.settings.lang))
                 Currencies.registerCustom(d.settings.customCurrencies)
+                // после пересчёта сразу сохраняем, чтобы на диске лежал новый формат
+                if (d.version != raw.version) persist(d)
                 return d
             }
         }

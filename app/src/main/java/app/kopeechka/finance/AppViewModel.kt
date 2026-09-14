@@ -196,11 +196,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         page = p
     }
 
-    fun finishOnboarding() = settings { it.copy(onboarded = true) }
+    /** Валюта, выбранная на последнем шаге заставки; пусто — ещё не выбирали. */
+    var onbCur by mutableStateOf("")
 
-    /** Последний шаг онбординга: убрать демо-данные и начать с одного пустого счёта. */
+    fun onbCurrency(): String = onbCur.ifBlank { store.current.settings.mainCur }
+
+    /** Конец заставки: демо-данные в выбранной валюте, она же становится базой курсов. */
+    fun finishOnboarding() {
+        val cur = onbCurrency()
+        val keep = store.current.settings
+        val demo = Demo.create(l, cur)
+        store.replace(
+            demo.copy(
+                settings = keep.copy(
+                    onboarded = true,
+                    mainCur = cur,
+                    rates = demo.settings.rates,
+                    currencyCodes = demo.settings.currencyCodes,
+                ),
+            ),
+        )
+    }
+
+    /** Последний шаг заставки: без примеров, один пустой счёт в выбранной валюте. */
     fun startClean() {
-        store.replace(Demo.empty(store.current.settings.copy(onboarded = true)))
+        val cur = onbCurrency()
+        store.replace(
+            Demo.empty(store.current.settings.copy(onboarded = true, mainCur = cur, rates = Demo.rates(cur))),
+        )
     }
 
     fun setDark(on: Boolean) = settings { it.copy(dark = on) }
@@ -333,9 +356,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ——— валюты ———
 
+    /**
+     * Смена основной валюты. Она же база курсов, поэтому все курсы пересчитываются
+     * относительно новой валюты, а лимиты категорий переводятся в неё.
+     * Остатки счетов и суммы операций не трогаем — они хранятся в валютах счетов.
+     */
     fun setMainCur(code: String) {
-        settings { it.copy(mainCur = code) }
         curSheet = null
+        if (code == store.current.settings.mainCur) return
+        confirm = Confirm(
+            l.t("msg.mainCurTitle"),
+            l.t("msg.mainCurText", code + " (" + Currencies.sym(code) + ")"),
+            l.t("msg.mainCurAction"),
+        ) { applyMainCur(code) }
+    }
+
+    private fun applyMainCur(code: String) {
+        store.update { s ->
+            val c = Calc(s)
+            val div = c.rate(code).takeIf { it > 0 } ?: 1.0
+            val old = s.settings.mainCur
+            val rates = s.settings.rates.mapValues { (_, v) -> v / div } +
+                (code to 1.0) +
+                (old to c.rate(old) / div)
+            s.copy(
+                categories = s.categories.map { it.copy(limitBase = it.limitBase / div) },
+                settings = s.settings.copy(
+                    mainCur = code,
+                    rates = rates,
+                    currencyCodes = (listOf(code) + s.settings.currencyCodes).distinct(),
+                ),
+            )
+        }
         say("msg.mainCurSet", Currencies.info(code).name)
     }
 
@@ -378,8 +430,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (x <= 0 || from == to) return
         val c = calc
         when {
-            from != Currencies.BASE -> settings { it.copy(rates = it.rates + (from to x * c.rate(to))) }
-            to != Currencies.BASE -> settings { it.copy(rates = it.rates + (to to c.rate(from) / x)) }
+            from != c.main -> settings { it.copy(rates = it.rates + (from to x * c.rate(to))) }
+            to != c.main -> settings { it.copy(rates = it.rates + (to to c.rate(from) / x)) }
         }
     }
 
@@ -390,7 +442,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settings { s ->
             s.copy(
                 currencyCodes = (s.currencyCodes + c).distinct(),
-                rates = if (s.rates.containsKey(c)) s.rates else s.rates + (c to Currencies.defaultRate(c)),
+                rates = if (s.rates.containsKey(c)) s.rates else s.rates + (c to Currencies.hintRate(c, s.mainCur)),
             )
         }
         currencyPicker = false
@@ -405,7 +457,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (code.length !in 2..6) return say("msg.curCodeLen")
         if (calc.currencies.contains(code)) return say("msg.curExists")
         val rate = dft.rate.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
-        if (rate <= 0) return say("msg.curRate")
+        if (rate <= 0) return say("msg.curRate", store.current.settings.mainCur)
         val name = dft.name.trim().ifBlank { code }
         val def = CurrencyDef(code, dft.sym.trim().ifBlank { code }, name, name)
         settings { s ->
@@ -421,9 +473,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun removeCurrency(code: String) {
-        if (code == Currencies.BASE) return say("msg.curBase")
         val d = store.current
-        if (d.settings.mainCur == code) return say("msg.curIsMain")
+        if (d.settings.mainCur == code) return say("msg.curBase", Currencies.info(code).name)
         if (d.accounts.any { it.cur == code }) return say("msg.curUsedAcc")
         if (d.goals.any { it.cur == code }) return say("msg.curUsedGoal")
         settings { s ->
@@ -514,7 +565,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (name.isEmpty()) return say("msg.enterCatName")
         val code = e.code.trim().ifBlank { name.filter { it.isLetter() }.take(2) }.uppercase().take(2).ifBlank { "??" }
         val c = calc
-        val limitBase = c.conv(e.limit.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0, c.main, Currencies.BASE)
+        // лимит вводится и хранится в основной валюте
+        val limitBase = e.limit.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
         store.update { s ->
             if (e.id == null) {
                 s.copy(
