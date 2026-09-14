@@ -73,6 +73,9 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                                 Page.GOALS -> GoalsPage(vm, calc)
                                 Page.BACKUP -> BackupPage(vm, calc)
                                 Page.CURRENCIES -> CurrenciesPage(vm, calc)
+                                Page.BUSINESS -> BusinessPage(vm, calc)
+                                Page.PRODUCTS -> ProductsPage(vm, calc)
+                                Page.CUSTOMERS -> CustomersPage(vm, calc)
                             }
                         }
                     }
@@ -89,6 +92,11 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.goalSheet?.let { GoalContributeSheet(vm, calc, it) }
                 if (vm.csvExportSheet) CsvExportSheet(vm, calc)
                 vm.csvPreview?.let { CsvImportSheet(vm, it) }
+                vm.orderDraft?.let { OrderOverlay(vm, calc, it) }
+                vm.productEdit?.let { ProductOverlay(vm, calc, it) }
+                vm.customerEdit?.let { CustomerOverlay(vm, calc, it) }
+                if (vm.orderDraft?.picking == true) ItemPickerSheet(vm, calc)
+                vm.paySheet?.let { PaySheetView(vm, calc, it) }
             }
             vm.confirm?.let { ConfirmSheet(vm, it) }
             vm.toast?.let {
@@ -197,11 +205,12 @@ private val ONB_CURRENCIES = listOf("USD", "EUR", "RUB", "TMT", "KZT", "TRY", "A
 private fun Onboarding(vm: AppViewModel) {
     val c = T.c
     val l = T.l
-    val step = vm.onbStep.coerceIn(0, 3)
+    val last = 4
+    val step = vm.onbStep.coerceIn(0, last)
     val picked = vm.onbCurrency()
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-            (0..3).forEach { i ->
+            (0..last).forEach { i ->
                 Box(Modifier.width(if (i == step) 26.dp else 8.dp).height(4.dp).background(if (i == step) c.a300 else c.hairline))
             }
         }
@@ -217,7 +226,29 @@ private fun Onboarding(vm: AppViewModel) {
         }
         Spacer(Modifier.height(22.dp))
 
-        if (step < 3) {
+        if (step == last) {
+            Text(l.t("onb.biz.title"), style = T.h(32.sp, c.onAccent, (-0.01).em, 34.sp))
+            Spacer(Modifier.height(12.dp))
+            Text(l.t("onb.biz.body"), style = T.b(15.sp, c.a300, lineHeight = 22.sp))
+            Spacer(Modifier.height(18.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(true, false).forEach { yes ->
+                    val on = vm.onbBusiness == yes
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(if (on) c.a300.copy(alpha = 0.2f) else Color.Transparent)
+                            .hairline(if (on) c.a300 else c.hairline)
+                            .tap { vm.onbBusiness = yes }
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(l.t(if (yes) "onb.biz.yes" else "onb.biz.no"), style = T.h(17.sp, c.onAccent))
+                        Text(l.t(if (yes) "onb.biz.yesNote" else "onb.biz.noNote"), style = T.b(12.sp, c.a300))
+                    }
+                }
+            }
+        } else if (step < 3) {
             Text(l.t("onb.${step + 1}.title"), style = T.h(38.sp, c.onAccent, (-0.01).em, 40.sp))
             Spacer(Modifier.height(16.dp))
             Text(l.t("onb.${step + 1}.body"), style = T.b(17.sp, c.a300, lineHeight = 25.sp))
@@ -253,8 +284,8 @@ private fun Onboarding(vm: AppViewModel) {
         }
 
         Spacer(Modifier.weight(1f))
-        PrimaryButton(if (step < 3) l.t("onb.next") else l.t("onb.start"), {
-            if (step < 3) vm.onbStep = step + 1 else vm.finishOnboarding()
+        PrimaryButton(if (step < last) l.t("onb.next") else l.t("onb.start"), {
+            if (step < last) vm.onbStep = step + 1 else vm.finishOnboarding()
         })
         Spacer(Modifier.height(10.dp))
         Text(

@@ -616,6 +616,7 @@ fun CsvImportSheet(vm: AppViewModel, p: Csv.Preview) {
             Text(l.t("csv.errorsFound", p.errors.size), style = T.b(12.sp, col.danger))
             p.errors.take(4).forEach { Muted(it, 11f) }
         }
+        if (p.skipped > 0) Muted(l.t("csv.skipped", p.skipped), 11f)
         if (p.newAccounts.isNotEmpty()) Muted(l.t("csv.newAccounts", p.newAccounts.joinToString(", ")), 11f)
         if (p.newCats.isNotEmpty()) Muted(l.t("csv.newCats", p.newCats.joinToString(", ")), 11f)
         PrimaryButton(l.t("csv.apply", l.n(p.rows.size, "op")), { vm.applyImport() }, enabled = p.rows.isNotEmpty())

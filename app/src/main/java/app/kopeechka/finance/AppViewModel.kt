@@ -11,21 +11,34 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.kopeechka.finance.data.Account
 import app.kopeechka.finance.data.AppData
+import app.kopeechka.finance.data.CAT_COST
 import app.kopeechka.finance.data.CAT_GOAL
+import app.kopeechka.finance.data.CAT_SALE
 import app.kopeechka.finance.data.CAT_TRANSFER
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Category
 import app.kopeechka.finance.data.Csv
 import app.kopeechka.finance.data.CurrencyDef
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.Customer
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.Goal
 import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.data.Order
+import app.kopeechka.finance.data.OrderItem
+import app.kopeechka.finance.data.OrderStatus
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
+import app.kopeechka.finance.data.Product
 import app.kopeechka.finance.data.Settings
 import app.kopeechka.finance.data.Tx
+import app.kopeechka.finance.data.customerName
+import app.kopeechka.finance.data.nextOrderNo
+import app.kopeechka.finance.data.orderCost
+import app.kopeechka.finance.data.orderCur
+import app.kopeechka.finance.data.orderTotal
+import app.kopeechka.finance.data.product
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.AiError
 import app.kopeechka.finance.net.DriveBackup
@@ -46,7 +59,7 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 enum class Tab { HOME, OPS, BUDGET, REPORT, SETTINGS }
-enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES }
+enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS }
 enum class Kind(val key: String) { EXPENSE("kind.expense"), INCOME("kind.income"), TRANSFER("kind.transfer") }
 
 data class Draft(
@@ -94,6 +107,52 @@ data class Confirm(val title: String, val text: String, val action: String, val 
 /** Запрос к системному диалогу файлов: "create" — сохранить, "open" — открыть. */
 data class FileRequest(val kind: String, val name: String)
 
+// ——— «Дело»: черновики прайса, клиентов и заказов ———
+
+data class ProductEdit(
+    val id: String? = null,
+    val name: String = "",
+    val price: String = "",
+    val cost: String = "",
+    val unit: String = "",
+)
+
+data class CustomerEdit(
+    val id: String? = null,
+    val name: String = "",
+    val contact: String = "",
+    val note: String = "",
+)
+
+/** Позиция заказа в редакторе: числа держим строками, иначе не набрать «1,5». */
+data class ItemDraft(
+    val productId: String = "",
+    val name: String = "",
+    val qty: String = "1",
+    val price: String = "",
+    val cost: String = "",
+)
+
+data class OrderDraft(
+    val id: Long? = null,
+    val no: String = "",
+    val customerId: String = "",
+    /** Имя клиента, которого заводим прямо в заказе. */
+    val newCustomer: String = "",
+    val date: Long = LocalDate.now().toEpochDay(),
+    val items: List<ItemDraft> = emptyList(),
+    val discount: String = "",
+    val extraCost: String = "",
+    val cur: String = "",
+    val status: String = OrderStatus.NEW,
+    val note: String = "",
+    /** Открыт выбор позиции из прайса. */
+    val picking: Boolean = false,
+)
+
+/** Приём оплаты: на какой счёт и списывать ли себестоимость. */
+data class PaySheet(val orderId: Long, val acc: String, val writeCost: Boolean = false)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val host = app as KopeechkaApp
     private val store = host.store
@@ -113,12 +172,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var toast by mutableStateOf<String?>(null)
     var onbStep by mutableStateOf(0)
 
+    var orderDraft by mutableStateOf<OrderDraft?>(null)
+    var productEdit by mutableStateOf<ProductEdit?>(null)
+    var customerEdit by mutableStateOf<CustomerEdit?>(null)
+    var paySheet by mutableStateOf<PaySheet?>(null)
+
+    /** Фильтр списка заказов: "all", "open", "paid". */
+    var orderFilter by mutableStateOf("all")
+
+    /** Период на странице «Дело» — отдельный от отчётов. */
+    var bizPeriod by mutableStateOf(Period.MONTH)
+    var bizOffset by mutableStateOf(0)
+
     var opsFilter by mutableStateOf("all")
     var period by mutableStateOf(Period.MONTH)
     var cut by mutableStateOf(Cut.CATS)
 
     /** 0 — текущий период, −1 — предыдущий и так далее. */
     var periodOffset by mutableStateOf(0)
+
+    /** Фильтры отчёта: null — без ограничения. */
+    var filterAcc by mutableStateOf<String?>(null)
+    var filterCat by mutableStateOf<String?>(null)
+    var filtersOpen by mutableStateOf(false)
+
+    val hasFilters get() = filterAcc != null || filterCat != null
+
+    fun resetFilters() {
+        filterAcc = null
+        filterCat = null
+    }
+
+    /** Данные, суженные фильтрами отчёта: остальные экраны считают по полным. */
+    fun filtered(d: AppData): AppData {
+        if (!hasFilters) return d
+        return d.copy(
+            txs = d.txs.filter { t ->
+                (filterAcc == null || t.acc == filterAcc || t.toAcc == filterAcc) &&
+                    (filterCat == null || t.cat == filterCat)
+            },
+        )
+    }
     var currencyPicker by mutableStateOf(false)
     var currencyQuery by mutableStateOf("")
     var currencyDraft by mutableStateOf<CurrencyDraft?>(null)
@@ -168,6 +262,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun back(): Boolean {
         when {
             confirm != null -> confirm = null
+            paySheet != null -> paySheet = null
+            orderDraft?.picking == true -> orderDraft = orderDraft?.copy(picking = false)
+            orderDraft != null -> orderDraft = null
+            productEdit != null -> productEdit = null
+            customerEdit != null -> customerEdit = null
             goalSheet != null -> goalSheet = null
             curSheet != null -> curSheet = null
             accEdit != null -> accEdit = null
@@ -201,11 +300,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onbCurrency(): String = onbCur.ifBlank { store.current.settings.mainCur }
 
+    /** Ответ на шаге заставки «ведёте своё дело». */
+    var onbBusiness by mutableStateOf(false)
+
     /** Конец заставки: демо-данные в выбранной валюте, она же становится базой курсов. */
     fun finishOnboarding() {
         val cur = onbCurrency()
         val keep = store.current.settings
-        val demo = Demo.create(l, cur)
+        val demo = Demo.create(l, cur, LocalDate.now(), onbBusiness)
         store.replace(
             demo.copy(
                 settings = keep.copy(
@@ -213,6 +315,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     mainCur = cur,
                     rates = demo.settings.rates,
                     currencyCodes = demo.settings.currencyCodes,
+                    business = onbBusiness,
                 ),
             ),
         )
@@ -221,9 +324,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Последний шаг заставки: без примеров, один пустой счёт в выбранной валюте. */
     fun startClean() {
         val cur = onbCurrency()
-        store.replace(
-            Demo.empty(store.current.settings.copy(onboarded = true, mainCur = cur, rates = Demo.rates(cur))),
+        val base = Demo.empty(
+            store.current.settings.copy(onboarded = true, mainCur = cur, rates = Demo.rates(cur), business = onbBusiness),
         )
+        store.replace(if (onbBusiness) base.copy(categories = base.categories + Demo.bizCategories(l)) else base)
     }
 
     fun setDark(on: Boolean) = settings { it.copy(dark = on) }
@@ -309,17 +413,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val c = calc
         val src = c.acc(d.from) ?: return say("msg.noAccount")
         val id = d.editId ?: store.current.nextId
+        // сколько эта же операция уже списывала со счёта — при правке её нужно вернуть
+        val old = d.editId?.let { eid -> store.current.txs.firstOrNull { it.id == eid && it.acc == src.id }?.amount } ?: 0.0
         val tx = when (d.kind) {
             Kind.TRANSFER -> {
                 val dst = c.acc(d.to) ?: return say("msg.pickToAcc")
                 if (src.id == dst.id) return say("msg.sameAccounts")
-                val old = d.editId?.let { eid -> store.current.txs.firstOrNull { it.id == eid && it.acc == src.id }?.amount } ?: 0.0
-                if (c.balance(src) - old < v) return say("msg.notEnough", src.name)
+                if (!c.s.allowNegative && c.balance(src) - old < v) return say("msg.notEnough", src.name)
                 val got = c.conv(v, src.cur, dst.cur)
                 Tx(id, d.date, l.t("msg.transferTitle", src.name, dst.name), CAT_TRANSFER, src.id, -v, d.note, dst.id, got)
             }
             Kind.INCOME -> Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.incomeCat).name }, d.incomeCat, src.id, v)
-            Kind.EXPENSE -> Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.cat).name }, d.cat, src.id, -v)
+            Kind.EXPENSE -> {
+                if (!c.s.allowNegative && c.balance(src) - old < v) {
+                    return say("msg.notEnoughHint", src.name, c.fmt(v - (c.balance(src) - old), src.cur))
+                }
+                Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.cat).name }, d.cat, src.id, -v)
+            }
         }
         store.update { s ->
             if (d.editId != null) s.copy(txs = s.txs.map { if (it.id == d.editId) tx else it })
@@ -348,7 +458,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (g.id == t.goal) g.copy(saved = max(0.0, g.saved - c.conv(-t.amount, c.accCur(t.acc), g.cur))) else g
                 }
             }
-            s.copy(txs = s.txs.filterNot { it.id == id }, goals = goals)
+            // операция могла быть создана оплатой заказа — снимаем с него отметку об оплате
+            val orders = s.orders.map { o ->
+                when (id) {
+                    o.incomeTxId -> o.copy(status = OrderStatus.DONE, incomeTxId = null)
+                    o.costTxId -> o.copy(costTxId = null)
+                    else -> o
+                }
+            }
+            s.copy(txs = s.txs.filterNot { it.id == id }, goals = goals, orders = orders)
         }
         draft = null
         say("msg.txDeleted")
@@ -381,6 +499,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 (old to c.rate(old) / div)
             s.copy(
                 categories = s.categories.map { it.copy(limitBase = it.limitBase / div) },
+                // цены прайса тоже хранятся в основной валюте; суммы заказов — в своих
+                products = s.products.map { it.copy(price = it.price / div, cost = it.cost / div) },
                 settings = s.settings.copy(
                     mainCur = code,
                     rates = rates,
@@ -498,11 +618,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (n <= 0) periodOffset = n
     }
 
-    /** Переход из карточки на главном в нужный отчёт. */
+    /** Переход из карточки на главном в нужный отчёт: фильтры при этом сбрасываются. */
     fun goReport(p: Period, c: Cut, offset: Int = 0) {
         period = p
         cut = c
         periodOffset = offset
+        resetFilters()
         page = null
         tab = Tab.REPORT
     }
@@ -651,7 +772,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val g = store.current.goals.firstOrNull { it.id == gs.goalId } ?: return
         val a = c.acc(gs.from) ?: return
         val debit = c.conv(gs.amount, g.cur, a.cur)
-        if (c.balance(a) < debit) return say("msg.notEnoughGoal", a.name)
+        if (!c.s.allowNegative && c.balance(a) < debit) return say("msg.notEnoughGoal", a.name)
         store.update { s ->
             s.copy(
                 txs = listOf(Tx(s.nextId, c.todayDay, l.t("msg.goalTitle", g.name), CAT_GOAL, a.id, -debit, goal = g.id)) + s.txs,
@@ -683,8 +804,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun askLoadDemo() {
         confirm = Confirm(l.t("msg.demoTitle"), l.t("msg.demoText"), l.t("msg.demoReplace")) {
-            val demo = Demo.create(l)
-            store.replace(demo.copy(settings = store.current.settings.copy(onboarded = true, mainCur = demo.settings.mainCur)))
+            val s = store.current.settings
+            // Демо приходит в валюте, которой человек уже пользуется: основная валюта
+            // и курсы остаются прежними, иначе база курсов разошлась бы с mainCur.
+            val demo = Demo.create(l, s.mainCur)
+            store.replace(
+                demo.copy(
+                    settings = s.copy(
+                        onboarded = true,
+                        rates = demo.settings.rates + s.rates + (s.mainCur to 1.0),
+                        currencyCodes = (listOf(s.mainCur) + s.currencyCodes).distinct(),
+                    ),
+                ),
+            )
             say("msg.demoLoaded")
         }
     }
@@ -743,6 +875,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     resolver.openOutputStream(uri)?.use { it.write(Csv.export(d, r?.first, r?.second).toByteArray(Charsets.UTF_8)) }
                     say("csv.exported", l.n(count, "op"), name)
                 }
+                "orders" -> {
+                    val r = pendingExportRange
+                    val count = store.current.orders.count { o -> r == null || (o.date >= r.first && o.date <= r.second) }
+                    resolver.openOutputStream(uri)?.use { it.write(Csv.exportOrders(store.current, l, r?.first, r?.second).toByteArray(Charsets.UTF_8)) }
+                    say("csv.exported", l.n(count, "order"), name)
+                }
                 "template" -> {
                     resolver.openOutputStream(uri)?.use { it.write(Csv.template(store.current, l).toByteArray(Charsets.UTF_8)) }
                     say("csv.templateSaved", name)
@@ -764,6 +902,362 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         store.update { Csv.apply(it, p, l) }
         csvPreview = null
         say("csv.imported", l.n(p.rows.size, "op"))
+    }
+
+    // ——— «Дело»: прайс, клиенты, заказы ———
+
+    /** Число из поля ввода: «1 200,50», «1.5», «1,5» — всё одно. */
+    private fun num(text: String): Double {
+        val t = text.trim().replace(" ", "").replace(" ", "").replace(',', '.')
+        val i = t.lastIndexOf('.')
+        val clean = if (i < 0) t else t.substring(0, i).replace(".", "") + "." + t.substring(i + 1)
+        return clean.toDoubleOrNull() ?: 0.0
+    }
+
+    /** Число обратно в поле: целое — без хвоста, дробное — с разделителем языка. */
+    private fun numText(v: Double): String {
+        if (v == v.roundToLong().toDouble()) return v.roundToLong().toString()
+        val s = java.math.BigDecimal(v).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+        return if (l.code == "en") s else s.replace('.', ',')
+    }
+
+    /** Категории «Продажи» и «Себестоимость» — без них оплате некуда записаться. */
+    private fun withBizCats(s: AppData): List<Category> =
+        s.categories + Demo.bizCategories(l).filterNot { b -> s.categories.any { it.id == b.id } }
+
+    fun setBusiness(on: Boolean) {
+        store.update { s -> s.copy(categories = if (on) withBizCats(s) else s.categories, settings = s.settings.copy(business = on)) }
+        if (!on && page in listOf(Page.BUSINESS, Page.PRODUCTS, Page.CUSTOMERS)) page = null
+        if (!on && cut.biz) cut = Cut.CATS
+        say(if (on) "biz.turnedOn" else "biz.turnedOff")
+    }
+
+    /** Пример дела: прайс, клиенты и заказы — чтобы было с чем разобраться. */
+    fun loadBizDemo() {
+        val d = store.current
+        val acc = d.accounts.firstOrNull()?.id ?: return say("msg.noAccount")
+        val biz = Demo.bizData(l, d.settings.mainCur, LocalDate.now(), acc)
+        store.update { s ->
+            s.copy(
+                categories = withBizCats(s),
+                products = s.products + biz.products.filterNot { p -> s.products.any { it.id == p.id } },
+                customers = s.customers + biz.customers.filterNot { p -> s.customers.any { it.id == p.id } },
+                orders = s.orders + biz.orders.filterNot { p -> s.orders.any { it.id == p.id } },
+                txs = biz.txs.filterNot { t -> s.txs.any { it.id == t.id } } + s.txs,
+            )
+        }
+        say("biz.demoLoaded")
+    }
+
+    fun selectBizPeriod(p: Period) {
+        bizPeriod = p
+        bizOffset = 0
+    }
+
+    fun shiftBizPeriod(delta: Int) {
+        val n = bizOffset + delta
+        if (n <= 0) bizOffset = n
+    }
+
+    // прайс
+
+    fun openProduct(p: Product?) {
+        productEdit = if (p == null) ProductEdit()
+        else ProductEdit(p.id, p.name, numText(p.price), if (p.cost > 0) numText(p.cost) else "", p.unit)
+    }
+
+    fun saveProduct() {
+        val e = productEdit ?: return
+        val name = e.name.trim()
+        if (name.isEmpty()) return say("biz.needName")
+        store.update { s ->
+            if (e.id == null) {
+                s.copy(
+                    products = s.products + Product("p${s.nextId}", name, num(e.price), num(e.cost), e.unit.trim()),
+                    nextId = s.nextId + 1,
+                )
+            } else {
+                s.copy(
+                    products = s.products.map {
+                        if (it.id == e.id) it.copy(name = name, price = num(e.price), cost = num(e.cost), unit = e.unit.trim()) else it
+                    },
+                )
+            }
+        }
+        productEdit = null
+        say(if (e.id == null) "biz.productAdded" else "biz.productSaved", name)
+    }
+
+    fun askDeleteProduct(id: String) {
+        val p = store.current.products.firstOrNull { it.id == id } ?: return
+        confirm = Confirm(l.t("biz.deleteProductTitle"), l.t("biz.deleteProductText", p.name), l.t("common.delete")) {
+            store.update { s -> s.copy(products = s.products.filterNot { it.id == id }) }
+            productEdit = null
+            say("biz.productDeleted")
+        }
+    }
+
+    // клиенты
+
+    fun openCustomer(c: Customer?) {
+        customerEdit = if (c == null) CustomerEdit() else CustomerEdit(c.id, c.name, c.contact, c.note)
+    }
+
+    fun saveCustomer() {
+        val e = customerEdit ?: return
+        val name = e.name.trim()
+        if (name.isEmpty()) return say("biz.needName")
+        store.update { s ->
+            if (e.id == null) {
+                s.copy(
+                    customers = s.customers + Customer("cl${s.nextId}", name, e.contact.trim(), e.note.trim()),
+                    nextId = s.nextId + 1,
+                )
+            } else {
+                s.copy(
+                    customers = s.customers.map {
+                        if (it.id == e.id) it.copy(name = name, contact = e.contact.trim(), note = e.note.trim()) else it
+                    },
+                )
+            }
+        }
+        customerEdit = null
+        say(if (e.id == null) "biz.customerAdded" else "biz.customerSaved", name)
+    }
+
+    fun askDeleteCustomer(id: String) {
+        val d = store.current
+        val cst = d.customers.firstOrNull { it.id == id } ?: return
+        val n = d.orders.count { it.customerId == id }
+        confirm = Confirm(
+            l.t("biz.deleteCustomerTitle"),
+            if (n > 0) l.t("biz.deleteCustomerOrders", cst.name, l.n(n, "order")) else l.t("biz.deleteCustomerPlain", cst.name),
+            l.t("common.delete"),
+        ) {
+            store.update { s ->
+                s.copy(
+                    customers = s.customers.filterNot { it.id == id },
+                    orders = s.orders.map { if (it.customerId == id) it.copy(customerId = "") else it },
+                )
+            }
+            customerEdit = null
+            say("biz.customerDeleted")
+        }
+    }
+
+    // заказы
+
+    fun openOrder(o: Order?) {
+        val d = store.current
+        val c = calc
+        orderDraft = if (o == null) {
+            OrderDraft(
+                no = c.nextOrderNo(),
+                customerId = d.customers.firstOrNull()?.id.orEmpty(),
+                date = c.todayDay,
+                cur = d.settings.mainCur,
+            )
+        } else {
+            OrderDraft(
+                id = o.id,
+                no = o.no,
+                customerId = o.customerId,
+                date = o.date,
+                items = o.items.map { ItemDraft(it.productId, it.name, numText(it.qty), numText(it.price), if (it.cost > 0) numText(it.cost) else "") },
+                discount = if (o.discount > 0) numText(o.discount) else "",
+                extraCost = if (o.extraCost > 0) numText(o.extraCost) else "",
+                cur = c.orderCur(o),
+                status = o.status,
+                note = o.note,
+            )
+        }
+    }
+
+    /** Повторить заказ клиента: те же позиции, сегодняшняя дата, новый номер. */
+    fun repeatOrder(o: Order) {
+        val c = calc
+        orderDraft = OrderDraft(
+            no = c.nextOrderNo(),
+            customerId = o.customerId,
+            date = c.todayDay,
+            items = o.items.map { ItemDraft(it.productId, it.name, numText(it.qty), numText(it.price), if (it.cost > 0) numText(it.cost) else "") },
+            cur = c.orderCur(o),
+            note = o.note,
+        )
+    }
+
+    fun addItem(p: Product?) {
+        val e = orderDraft ?: return
+        val c = calc
+        val cur = e.cur.ifBlank { c.main }
+        val item = if (p == null) {
+            ItemDraft(name = "", qty = "1", price = "", cost = "")
+        } else {
+            // цены прайса лежат в основной валюте: в заказ другой валюты переводим по курсу
+            ItemDraft(p.id, p.name, "1", numText(c.conv(p.price, c.main, cur)), if (p.cost > 0) numText(c.conv(p.cost, c.main, cur)) else "")
+        }
+        orderDraft = e.copy(items = e.items + item, picking = false)
+    }
+
+    fun setItem(index: Int, item: ItemDraft) {
+        val e = orderDraft ?: return
+        orderDraft = e.copy(items = e.items.mapIndexed { i, old -> if (i == index) item else old })
+    }
+
+    fun removeItem(index: Int) {
+        val e = orderDraft ?: return
+        orderDraft = e.copy(items = e.items.filterIndexed { i, _ -> i != index })
+    }
+
+    /** Сумма и себестоимость черновика — для подписи в редакторе. */
+    fun draftTotal(e: OrderDraft): Double =
+        (e.items.sumOf { num(it.qty) * num(it.price) } - num(e.discount)).coerceAtLeast(0.0)
+
+    fun draftCost(e: OrderDraft): Double = e.items.sumOf { num(it.qty) * num(it.cost) } + num(e.extraCost)
+
+    fun saveOrder() {
+        val e = orderDraft ?: return
+        val items = e.items.mapNotNull { i ->
+            val name = i.name.trim().ifBlank { calc.product(i.productId)?.name.orEmpty() }
+            val qty = num(i.qty)
+            if (name.isBlank() || qty <= 0) null else OrderItem(i.productId, name, qty, num(i.price), num(i.cost))
+        }
+        if (items.isEmpty()) return say("biz.needItem")
+        val newName = e.newCustomer.trim()
+        var savedId: Long? = null
+        store.update { s ->
+            var nextId = s.nextId
+            var customers = s.customers
+            var cid = e.customerId
+            if (newName.isNotBlank()) {
+                cid = "cl$nextId"
+                customers = customers + Customer(cid, newName)
+                nextId++
+            }
+            val old = e.id?.let { id -> s.orders.firstOrNull { it.id == id } }
+            val id = e.id ?: nextId.also { nextId++ }
+            savedId = id
+            val order = Order(
+                id = id,
+                no = e.no.trim().ifBlank { Calc(s, l = l).nextOrderNo() },
+                customerId = cid,
+                date = e.date,
+                items = items,
+                discount = num(e.discount),
+                extraCost = num(e.extraCost),
+                cur = e.cur.ifBlank { s.settings.mainCur },
+                // оплату ставит только приём оплаты, редактор её не выдаёт
+                status = if (old?.status == OrderStatus.PAID) OrderStatus.PAID else e.status,
+                incomeTxId = old?.incomeTxId,
+                costTxId = old?.costTxId,
+                note = e.note.trim(),
+            )
+            s.copy(
+                customers = customers,
+                orders = if (e.id != null) s.orders.map { if (it.id == e.id) order else it } else s.orders + order,
+                nextId = nextId,
+            )
+        }
+        orderDraft = null
+        say(if (e.id == null) "biz.orderAdded" else "biz.orderSaved", e.no)
+    }
+
+    fun setOrderStatus(id: Long, status: String) {
+        if (status == OrderStatus.PAID) return openPay(id)
+        store.update { s -> s.copy(orders = s.orders.map { if (it.id == id) it.copy(status = status) else it }) }
+    }
+
+    fun askDeleteOrder(id: Long) {
+        val o = store.current.orders.firstOrNull { it.id == id } ?: return
+        val paid = o.incomeTxId != null
+        confirm = Confirm(
+            l.t("biz.deleteOrderTitle"),
+            if (paid) l.t("biz.deleteOrderPaid", o.no) else l.t("biz.deleteOrderText", o.no),
+            l.t("common.delete"),
+        ) {
+            store.update { s ->
+                val drop = listOfNotNull(o.incomeTxId, o.costTxId).toSet()
+                s.copy(orders = s.orders.filterNot { it.id == id }, txs = s.txs.filterNot { it.id in drop })
+            }
+            orderDraft = null
+            say("biz.orderDeleted")
+        }
+    }
+
+    // оплата
+
+    fun openPay(orderId: Long) {
+        val d = store.current
+        val c = calc
+        val o = d.orders.firstOrNull { it.id == orderId } ?: return
+        if (c.orderTotal(o) <= 0) return say("biz.needItem")
+        val cur = c.orderCur(o)
+        val acc = d.accounts.firstOrNull { it.cur == cur }?.id ?: d.accounts.firstOrNull()?.id ?: return say("msg.noAccount")
+        paySheet = PaySheet(orderId, acc)
+    }
+
+    /**
+     * Оплата заказа: обычная операция дохода в категории «Продажи» — выручка сразу
+     * попадает в баланс и во все прежние отчёты. Дата операции — дата заказа,
+     * чтобы «Дело» и «Отчёты» показывали её в одном и том же периоде.
+     */
+    fun confirmPay() {
+        val ps = paySheet ?: return
+        val c = calc
+        val o = store.current.orders.firstOrNull { it.id == ps.orderId } ?: return
+        val acc = c.acc(ps.acc) ?: return say("msg.noAccount")
+        val cur = c.orderCur(o)
+        val total = c.conv(c.orderTotal(o), cur, acc.cur)
+        if (total <= 0) return say("biz.needItem")
+        val cost = c.conv(c.orderCost(o), cur, acc.cur)
+        val who = c.customerName(o.customerId)
+        store.update { s ->
+            var nextId = s.nextId
+            val add = mutableListOf<Tx>()
+            val incomeId = nextId++
+            add += Tx(incomeId, o.date, l.t("biz.txTitle", o.no), CAT_SALE, acc.id, total, note = who)
+            var costId: Long? = null
+            if (ps.writeCost && cost > 0) {
+                val cid = nextId++
+                costId = cid
+                add += Tx(cid, o.date, l.t("biz.txCostTitle", o.no), CAT_COST, acc.id, -cost, note = who)
+            }
+            val drop = listOfNotNull(o.incomeTxId, o.costTxId).toSet()
+            s.copy(
+                categories = withBizCats(s),
+                txs = add + s.txs.filterNot { it.id in drop },
+                orders = s.orders.map {
+                    if (it.id == o.id) it.copy(status = OrderStatus.PAID, incomeTxId = incomeId, costTxId = costId) else it
+                },
+                nextId = nextId,
+            )
+        }
+        paySheet = null
+        orderDraft = null
+        say("biz.paid", c.fmt(total, acc.cur), acc.name)
+    }
+
+    /** Отменить оплату: убираем созданные операции, заказ возвращается в «выполнен». */
+    fun unpay(orderId: Long) {
+        val o = store.current.orders.firstOrNull { it.id == orderId } ?: return
+        confirm = Confirm(l.t("biz.unpayTitle"), l.t("biz.unpayText", o.no), l.t("biz.unpayAction")) {
+            store.update { s ->
+                val drop = listOfNotNull(o.incomeTxId, o.costTxId).toSet()
+                s.copy(
+                    txs = s.txs.filterNot { it.id in drop },
+                    orders = s.orders.map {
+                        if (it.id == orderId) it.copy(status = OrderStatus.DONE, incomeTxId = null, costTxId = null) else it
+                    },
+                )
+            }
+            say("biz.unpaid")
+        }
+    }
+
+    fun exportOrders() {
+        pendingFileKind = "orders"
+        pendingExportRange = calc.range(bizPeriod, bizOffset).let { it.from to it.to }
+        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-orders-${LocalDate.now()}.csv")) }
     }
 
     // ——— ИИ-советник ———

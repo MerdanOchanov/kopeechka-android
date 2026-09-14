@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,6 +45,9 @@ import app.kopeechka.finance.data.Bar
 import app.kopeechka.finance.data.BudgetRow
 import app.kopeechka.finance.data.CAT_TRANSFER
 import app.kopeechka.finance.data.Calc
+import app.kopeechka.finance.data.biz
+import app.kopeechka.finance.data.bizCompare
+import app.kopeechka.finance.data.bizFacts
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Goal
@@ -214,7 +218,13 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
                 HeroStat(l.t("home.income"), c.fmtMain(c.monthIncome))
                 HeroStat(l.t("home.expense"), c.fmtMain(c.monthExpense))
                 Spacer(Modifier.weight(1f))
-                HeroStat(l.t("home.free"), c.fmtMain(c.free), end = true)
+                val over = c.freeRaw < 0
+                HeroStat(
+                    if (over) l.t("home.over") else l.t("home.free"),
+                    c.fmtMain(abs(c.freeRaw)),
+                    end = true,
+                    tone = if (over) OverTone else col.onAccent,
+                )
             }
         }
 
@@ -223,7 +233,11 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
             CellGrid(c.d.accounts, 3, onClick = { vm.curSheet = CurSheet.Acc(it.id) }) { a ->
                 val bal = c.balances[a.id] ?: 0.0
                 Text(a.name.uppercase(), style = T.b(9.5.sp, col.n600, 0.12.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(c.fmt(bal, a.cur), style = T.h(15.sp, if (a.inTotal) col.text else col.n600), maxLines = 1)
+                Text(
+                    c.fmt(bal, a.cur),
+                    style = T.h(15.sp, if (bal < 0) col.danger else if (a.inTotal) col.text else col.n600),
+                    maxLines = 1,
+                )
                 Text(
                     if (a.cur == c.main) a.cur else "${a.cur} ≈ ${c.fmtMain(c.toMain(bal, a.cur))}",
                     style = T.b(9.5.sp, col.a700, 0.1.em),
@@ -232,6 +246,8 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
                 )
             }
         }
+
+        if (c.s.business) BusinessCard(vm, c)
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(l.t("home.budget")) { Muted(l.t("home.daysLeft", l.n(c.daysLeft, "day"))) }
@@ -365,12 +381,15 @@ private fun IncomeExpenseCard(vm: AppViewModel, c: Calc) {
     }
 }
 
+/** Перерасход на тёмной шапке: обычный danger на ней читается плохо. */
+private val OverTone = Color(0xFFE8A08F)
+
 @Composable
-private fun HeroStat(label: String, value: String, end: Boolean = false) {
+private fun HeroStat(label: String, value: String, end: Boolean = false, tone: Color = T.c.onAccent) {
     val col = T.c
     Column(horizontalAlignment = if (end) Alignment.End else Alignment.Start) {
         Text(label.uppercase(), style = T.b(10.sp, col.a300, 0.14.em))
-        Text(value, style = T.h(17.sp, col.onAccent), maxLines = 1)
+        Text(value, style = T.h(17.sp, tone), maxLines = 1)
     }
 }
 
@@ -522,18 +541,82 @@ fun BudgetScreen(vm: AppViewModel, c: Calc) {
 
 // ——— Отчёты ———
 
+/** Фильтры отчёта: один счёт и одна категория. Свёрнуты, пока не понадобятся. */
 @Composable
-fun ReportScreen(vm: AppViewModel, c: Calc) {
+private fun ReportFilters(vm: AppViewModel, c: Calc) {
+    val col = T.c
+    val l = T.l
+    val accName = vm.filterAcc?.let { id -> c.acc(id)?.name } ?: l.t("report.filterAllAccs")
+    val catName = vm.filterCat?.let { id -> c.cat(id).name } ?: l.t("report.filterAllCats")
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .hairline(if (vm.hasFilters) col.a600 else col.divider)
+                    .tap { vm.filtersOpen = !vm.filtersOpen }
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+            ) {
+                Text(
+                    if (vm.hasFilters) "$accName · $catName" else l.t("report.filters"),
+                    style = T.b(12.sp, if (vm.hasFilters) col.text else col.n600),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (vm.hasFilters) GhostButton(l.t("report.filtersReset"), { vm.resetFilters() }, size = 11)
+        }
+        if (vm.filtersOpen) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Kicker(l.t("report.filterAcc"))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Chip(l.t("report.filterAllAccs"), vm.filterAcc == null, { vm.filterAcc = null })
+                    c.d.accounts.forEach { a ->
+                        Chip(a.name, vm.filterAcc == a.id, { vm.filterAcc = if (vm.filterAcc == a.id) null else a.id })
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Kicker(l.t("report.filterCat"))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Chip(l.t("report.filterAllCats"), vm.filterCat == null, { vm.filterCat = null })
+                    c.d.categories.forEach { cat ->
+                        Chip(
+                            cat.name,
+                            vm.filterCat == cat.id,
+                            { vm.filterCat = if (vm.filterCat == cat.id) null else cat.id },
+                            code = cat.code,
+                            accent = catColor(c, cat.id),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReportScreen(vm: AppViewModel, full: Calc) {
     val col = T.c
     val l = T.l
     val p = vm.period
     val cut = vm.cut
+    // фильтры сужают данные только этого экрана: остальные считают по полным.
+    // В разрезах «Бизнеса» фильтры по счетам и категориям не применяются
+    val fc = remember(full.d, vm.filterAcc, vm.filterCat) { Calc(vm.filtered(full.d), full.today, full.l) }
+    val c = if (cut.biz) full else fc
     val r = c.range(p, vm.periodOffset)
     val exp = c.expenseIn(r)
     val inc = c.incomeIn(r)
     val bars = c.series(r, p, cut)
     val slices = c.breakdown(r, cut)
-    val cmp = c.compare(p, vm.periodOffset)
+    val cmp = if (cut.biz) c.bizCompare(p, vm.periodOffset) else c.compare(p, vm.periodOffset)
 
     ScreenColumn(gap = 18.dp) {
         Segments(Period.entries.map { l.t(it.key) }, p.ordinal, { vm.selectPeriod(Period.entries[it]) })
@@ -557,7 +640,8 @@ fun ReportScreen(vm: AppViewModel, c: Calc) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Cut.entries.chunked(2).forEach { row ->
+            val cuts = Cut.entries.filter { !it.biz || full.s.business }
+            cuts.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     row.forEach { k ->
                         val st = opt(k == cut)
@@ -570,9 +654,13 @@ fun ReportScreen(vm: AppViewModel, c: Calc) {
                                 .padding(horizontal = 6.dp, vertical = 8.dp),
                         ) { Text(l.t(k.key), style = T.b(12.sp, st.fg), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
+                    repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
+
+        // фильтры: счёт и категория. В разрезах «Дела» они не при чём — там свои данные
+        if (!cut.biz) ReportFilters(vm, full)
 
         StatGrid(
             listOf(
@@ -581,6 +669,8 @@ fun ReportScreen(vm: AppViewModel, c: Calc) {
                 Triple(l.t("report.saldo"), Currencies.fmtSigned(inc - exp, c.main, c.s.showKopecks), if (inc - exp < 0) col.danger else col.text),
             ),
         )
+
+        if (cut.biz) BizCutStats(c, cut, c.biz(r))
 
         // сравнение с прошлым периодом
         Row(
@@ -592,11 +682,12 @@ fun ReportScreen(vm: AppViewModel, c: Calc) {
             } else {
                 val (prev, delta) = cmp
                 val up = delta > 0
+                val good = if (cut.biz) up else !up
                 Column(Modifier.weight(1f)) {
-                    Kicker(l.t("report.compare"))
+                    Kicker(l.t(if (cut.biz) "biz.compare" else "report.compare"))
                     Text(
                         (if (up) "+" else "−") + "${abs(delta).roundToInt()}%",
-                        style = T.h(17.sp, if (up) col.danger else col.a700),
+                        style = T.h(17.sp, if (good) col.a700 else col.danger),
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -641,7 +732,7 @@ fun ReportScreen(vm: AppViewModel, c: Calc) {
 
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             SectionTitle(l.t("report.dynamics"))
-            c.facts(r).forEach { (label, value) ->
+            (if (cut.biz) c.bizFacts(r) else c.facts(r)).forEach { (label, value) ->
                 Row(
                     Modifier.fillMaxWidth().hairline(col.divider).padding(horizontal = 12.dp, vertical = 11.dp),
                     verticalAlignment = Alignment.CenterVertically,

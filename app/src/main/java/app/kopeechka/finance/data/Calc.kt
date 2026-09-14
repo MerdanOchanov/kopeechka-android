@@ -14,11 +14,14 @@ enum class Period(val key: String, val noteKey: String) {
     YEAR("period.year", "period.note.year"),
 }
 
-enum class Cut(val key: String, val titleKey: String) {
+/** Разрез отчёта. Помеченные `biz` показываются, только когда включён модуль «Дело». */
+enum class Cut(val key: String, val titleKey: String, val biz: Boolean = false) {
     CATS("cut.cats", "cut.title.cats"),
     ACCS("cut.accs", "cut.title.accs"),
     DAYS("cut.days", "cut.title.days"),
     IO("cut.io", "cut.title.io"),
+    PRODUCTS("cut.products", "cut.title.products", biz = true),
+    CLIENTS("cut.clients", "cut.title.clients", biz = true),
 }
 
 /** Календарный отрезок отчёта: неделя, месяц, квартал или год со сдвигом назад. */
@@ -100,7 +103,9 @@ class Calc(
         val sp = spentBy(monthTx)
         d.categories.filter { !it.income && it.limitBase > 0 }.map { BudgetRow(it, sp[it.id] ?: 0.0, limitMain(it)) }
     }
-    val free get() = max(0.0, limitTotal - monthExpense)
+    /** Остаток лимитов: может быть отрицательным — тогда это перерасход. */
+    val freeRaw get() = limitTotal - monthExpense
+    val free get() = max(0.0, freeRaw)
     val perDay get() = if (daysLeft > 0) free / (daysLeft + 1) else free
 
     // ——— подписи ———
@@ -181,12 +186,20 @@ class Calc(
                     Slice(l.t("report.saldo"), inc - exp, "—"),
                 )
             }
+            Cut.PRODUCTS -> byProduct(r)
+            Cut.CLIENTS -> byCustomer(r)
         }
     }
 
+    /** Выручка оплаченных заказов за отрезок — для столбиков в разрезах «Дела». */
+    fun revenueIn(from: Long, to: Long): Double =
+        d.orders.filter { it.status == OrderStatus.PAID && it.date in from..to }.sumOf { orderTotalMain(it) }
+
     fun series(r: Range, p: Period, cut: Cut): List<Bar> {
         val exp = d.txs.filter { isReal(it) && it.amount < 0 }
-        fun sum(from: Long, to: Long) = exp.filter { it.date in from..to }.sumOf { -txMain(it) }
+        // в разрезах «Дела» столбики показывают выручку, в остальных — расходы
+        fun sum(from: Long, to: Long) =
+            if (cut.biz) revenueIn(from, to) else exp.filter { it.date in from..to }.sumOf { -txMain(it) }
 
         val raw: List<Pair<String, Double>> = when {
             cut == Cut.DAYS -> {

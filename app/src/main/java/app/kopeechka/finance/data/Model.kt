@@ -89,6 +89,8 @@ data class Settings(
     val remind: Boolean = false,
     val remindHour: Int = 21,
     val showKopecks: Boolean = false,
+    /** Разрешить уводить счета в минус: без галочки приложение не даст потратить больше остатка. */
+    val allowNegative: Boolean = false,
     val autoBackup: Boolean = false,
     val lastBackupAt: Long = 0,
     val driveLinked: Boolean = false,
@@ -96,6 +98,8 @@ data class Settings(
     val aiModels: Map<String, String> = emptyMap(),
     val customEndpoint: String = "",
     val aiSets: Set<String> = setOf("ops", "budgets", "accounts"),
+    /** Модуль «Дело»: прайс, клиенты, заказы. Выключен — приложение выглядит как прежде. */
+    val business: Boolean = false,
 )
 
 @Serializable
@@ -105,6 +109,10 @@ data class AppData(
     val categories: List<Category> = emptyList(),
     val txs: List<Tx> = emptyList(),
     val goals: List<Goal> = emptyList(),
+    /** Прайс, клиенты и заказы модуля «Дело» — пустые, пока он выключен. */
+    val products: List<Product> = emptyList(),
+    val customers: List<Customer> = emptyList(),
+    val orders: List<Order> = emptyList(),
     val settings: Settings = Settings(),
     val nextId: Long = 1000,
 )

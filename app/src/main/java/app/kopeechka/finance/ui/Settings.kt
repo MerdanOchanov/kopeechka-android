@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.kopeechka.finance.AppViewModel
+import app.kopeechka.finance.BuildConfig
 import app.kopeechka.finance.CurSheet
 import app.kopeechka.finance.Page
 import app.kopeechka.finance.data.Calc
@@ -134,6 +135,13 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                     else -> l.t("backup.driveLinked")
                 },
             ) { vm.openPage(Page.BACKUP) }
+            if (s.business) {
+                NavRow(
+                    Icons.Rate,
+                    l.t("biz.title"),
+                    l.t("biz.navSub", l.n(c.d.orders.size, "order"), l.n(c.d.customers.size, "customer")),
+                ) { vm.openPage(Page.BUSINESS) }
+            }
             NavRow(
                 Icons.Spark,
                 l.t("set.advisor"),
@@ -188,6 +196,24 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("biz.title"))
+            Muted(l.t("biz.settingsNote"), 11.5f, color = col.n700)
+            SettingRow(l.t("biz.enable"), l.t("biz.enableSub")) {
+                Toggle(s.business) { vm.setBusiness(it) }
+            }
+            if (s.business) {
+                SecondaryButton(l.t("biz.openPage"), { vm.openPage(Page.BUSINESS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.money"))
+            SettingRow(l.t("set.allowNegative"), l.t("set.allowNegativeSub")) {
+                Toggle(s.allowNegative) { v -> vm.settings { it.copy(allowNegative = v) } }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle(l.t("set.look"))
             Segments(listOf(l.t("set.light"), l.t("set.dark")), if (s.dark) 1 else 0, { vm.setDark(it == 1) })
             SettingRow(l.t("set.kopecks"), l.t("set.kopecksSub")) {
@@ -225,7 +251,7 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             SectionTitle(l.t("set.data"))
             SecondaryButton(l.t("set.loadDemo"), { vm.askLoadDemo() }, Modifier.fillMaxWidth(), size = 13, upper = true)
             DangerButton(l.t("set.clearAll"), { vm.askClearAll() })
-            Muted(l.t("set.about"), 10.5f)
+            Muted(l.t("set.about", BuildConfig.VERSION_NAME), 10.5f)
         }
     }
 }
@@ -304,7 +330,7 @@ fun AccountsPage(vm: AppViewModel, c: Calc) {
         Blueprint(Modifier.fillMaxWidth()) {
             Kicker(l.t("acc.sum"))
             Spacer(Modifier.height(3.dp))
-            Text(c.fmtMain(c.totalMain), style = T.h(26.sp, col.text))
+            Text(c.fmtMain(c.totalMain), style = T.h(26.sp, if (c.totalMain < 0) col.danger else col.text))
         }
         Column {
             c.d.accounts.forEach { a ->
@@ -320,7 +346,7 @@ fun AccountsPage(vm: AppViewModel, c: Calc) {
                         Text(listOf(a.type, a.mask, a.cur).filter { it.isNotBlank() }.joinToString(" · "), style = T.b(11.sp, col.n600))
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(c.fmt(bal, a.cur), style = T.h(15.sp, col.text))
+                        Text(c.fmt(bal, a.cur), style = T.h(15.sp, if (bal < 0) col.danger else col.text))
                         Text(
                             if (a.inTotal) l.t("acc.inTotal") else l.t("acc.notInTotal"),
                             style = T.b(11.sp, if (a.inTotal) col.a700 else col.n500),

@@ -94,16 +94,96 @@ object Demo {
         Seed(163, "demo.tx.doctor", "health", "card", -5400.0),
     )
 
-    fun create(l: Lang = Lang.RU, cur: String = l.t("demo.cur"), today: LocalDate = LocalDate.now()): AppData {
-        val k = Currencies.hintRate("RUB", cur)
-        fun money(rub: Double): Double {
-            val v = rub * k
-            return when {
-                abs(v) >= 1000 -> (v / 10).roundToLong() * 10.0
-                abs(v) >= 100 -> v.roundToLong().toDouble()
-                else -> (v * 10).roundToLong() / 10.0
-            }
+    /** Демо-суммы заданы в рублях: переводим в валюту профиля и округляем до «человеческих». */
+    fun inCur(rub: Double, cur: String): Double {
+        val v = rub * Currencies.hintRate("RUB", cur)
+        return when {
+            abs(v) >= 1000 -> (v / 10).roundToLong() * 10.0
+            abs(v) >= 100 -> v.roundToLong().toDouble()
+            else -> (v * 10).roundToLong() / 10.0
         }
+    }
+
+    // ——— «Дело»: прайс, клиенты, заказы ———
+
+    private data class ProdSeed(val id: String, val nameKey: String, val unitKey: String, val price: Double, val cost: Double)
+
+    private val PRODUCTS = listOf(
+        ProdSeed("p1", "demo.prod.cake", "demo.unit.piece", 4500.0, 1800.0),
+        ProdSeed("p2", "demo.prod.cupcakes", "demo.unit.set", 2200.0, 900.0),
+        ProdSeed("p3", "demo.prod.gingerbread", "demo.unit.set", 1500.0, 600.0),
+        ProdSeed("p4", "demo.prod.delivery", "demo.unit.piece", 400.0, 150.0),
+    )
+
+    /** Заказ: сколько дней назад, клиент, позиции «товар × количество», скидка, статус. */
+    private data class OrderSeed(val d: Int, val customer: String, val items: List<Pair<String, Double>>, val discount: Double, val status: String)
+
+    private val ORDERS = listOf(
+        OrderSeed(0, "cl1", listOf("p2" to 1.0), 0.0, OrderStatus.NEW),
+        OrderSeed(1, "cl2", listOf("p1" to 2.0, "p4" to 1.0), 0.0, OrderStatus.WORK),
+        OrderSeed(2, "cl1", listOf("p1" to 1.0, "p4" to 1.0), 0.0, OrderStatus.PAID),
+        OrderSeed(5, "cl2", listOf("p2" to 3.0), 500.0, OrderStatus.PAID),
+        OrderSeed(9, "cl3", listOf("p3" to 2.0, "p4" to 1.0), 0.0, OrderStatus.PAID),
+        OrderSeed(16, "cl1", listOf("p1" to 1.0, "p2" to 1.0), 0.0, OrderStatus.PAID),
+        OrderSeed(34, "cl3", listOf("p1" to 1.0), 0.0, OrderStatus.PAID),
+        OrderSeed(41, "cl2", listOf("p2" to 2.0, "p3" to 1.0), 0.0, OrderStatus.PAID),
+    )
+
+    /** Категории продаж и себестоимости — без них оплаченному заказу некуда записать доход. */
+    fun bizCategories(l: Lang): List<Category> = listOf(
+        Category(CAT_SALE, l.t("demo.code.sale"), l.t("biz.catSale"), income = true, color = "#3E8E8A"),
+        Category(CAT_COST, l.t("demo.code.cost"), l.t("biz.catCost"), color = "#9A5B4A"),
+    )
+
+    /** Прайс, клиенты, заказы и операции дохода по оплаченным заказам. */
+    data class Biz(val products: List<Product>, val customers: List<Customer>, val orders: List<Order>, val txs: List<Tx>)
+
+    fun bizData(l: Lang, cur: String, today: LocalDate = LocalDate.now(), acc: String = "card"): Biz {
+        fun money(rub: Double) = inCur(rub, cur)
+        val products = PRODUCTS.map { Product(it.id, l.t(it.nameKey), money(it.price), money(it.cost), l.t(it.unitKey)) }
+        val customers = listOf(
+            Customer("cl1", l.t("demo.cust.1"), l.t("demo.cust.1contact")),
+            Customer("cl2", l.t("demo.cust.2"), l.t("demo.cust.2contact")),
+            Customer("cl3", l.t("demo.cust.3"), l.t("demo.cust.3contact")),
+        )
+        val byId = products.associateBy { it.id }
+        val txs = mutableListOf<Tx>()
+        val orders = ORDERS.sortedBy { it.d }.mapIndexed { i, s ->
+            val date = today.minusDays(s.d.toLong()).toEpochDay()
+            val items = s.items.map { (pid, qty) ->
+                val p = byId.getValue(pid)
+                OrderItem(p.id, p.name, qty, p.price, p.cost)
+            }
+            val no = "${today.year}-" + (ORDERS.size - i).toString().padStart(3, '0')
+            val total = (items.sumOf { it.qty * it.price } - money(s.discount)).coerceAtLeast(0.0)
+            var incomeTxId: Long? = null
+            if (s.status == OrderStatus.PAID) {
+                incomeTxId = 500L + i
+                txs += Tx(incomeTxId, date, l.t("biz.txTitle", no), CAT_SALE, acc, total)
+            }
+            Order(
+                id = 600L + i,
+                no = no,
+                customerId = s.customer,
+                date = date,
+                items = items,
+                discount = money(s.discount),
+                cur = cur,
+                status = s.status,
+                incomeTxId = incomeTxId,
+            )
+        }
+        return Biz(products, customers, orders, txs)
+    }
+
+    fun create(
+        l: Lang = Lang.RU,
+        cur: String = l.t("demo.cur"),
+        today: LocalDate = LocalDate.now(),
+        business: Boolean = false,
+    ): AppData {
+        fun money(rub: Double) = inCur(rub, cur)
+        val biz = if (business) bizData(l, cur, today) else Biz(emptyList(), emptyList(), emptyList(), emptyList())
 
         val txs = SEED.mapIndexed { i, s ->
             Tx(
@@ -116,8 +196,10 @@ object Demo {
             )
         }
 
+        val all = txs + biz.txs
+
         // Стартовые остатки подобраны так, чтобы текущие балансы были «круглыми».
-        fun initial(acc: String, target: Double) = target - txs.filter { it.acc == acc }.sumOf { it.amount }
+        fun initial(acc: String, target: Double) = target - all.filter { it.acc == acc }.sumOf { it.amount }
         val accounts = listOf(
             Account("card", l.t("demo.acc.card"), l.t("acc.type.card"), l.t("demo.acc.cardMask"), cur, initial("card", money(112480.0))),
             Account("cash", l.t("demo.acc.cash"), l.t("acc.type.cash"), "", cur, initial("cash", money(9840.0))),
@@ -133,14 +215,18 @@ object Demo {
         return AppData(
             version = Currencies.DATA_VERSION,
             accounts = accounts,
-            categories = categories(l, cur),
-            txs = txs,
+            categories = categories(l, cur) + if (business) bizCategories(l) else emptyList(),
+            txs = all.sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.id }),
             goals = goals,
+            products = biz.products,
+            customers = biz.customers,
+            orders = biz.orders,
             settings = Settings(
                 mainCur = cur,
                 lang = if (l.code == Lang.fromSystem().code) "auto" else l.code,
                 rates = rates(cur),
                 currencyCodes = (listOf(cur) + Currencies.DEFAULT_CODES).distinct(),
+                business = business,
             ),
             nextId = 1000,
         )

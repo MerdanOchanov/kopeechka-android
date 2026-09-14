@@ -73,6 +73,34 @@ object Csv {
         return sb.toString()
     }
 
+    /** Колонки выгрузки заказов «Дела». Загрузки для них нет: заказы заводятся в приложении. */
+    val ORDER_COLUMNS = listOf("no", "date", "customer", "status", "currency", "total", "cost", "profit", "items", "note")
+
+    fun exportOrders(d: AppData, l: Lang, from: Long? = null, to: Long? = null): String {
+        val c = Calc(d, l = l)
+        val rows = d.orders
+            .filter { (from == null || it.date >= from) && (to == null || it.date <= to) }
+            .sortedWith(compareBy<Order> { it.date }.thenBy { it.id })
+        val sb = StringBuilder("﻿")
+        sb.append(ORDER_COLUMNS.joinToString(";")).append('\n')
+        rows.forEach { o ->
+            val cells = listOf(
+                o.no,
+                LocalDate.ofEpochDay(o.date).format(DATE),
+                c.customerName(o.customerId),
+                l.t(OrderStatus.key(o.status)),
+                c.orderCur(o),
+                num(c.orderTotal(o)),
+                num(c.orderCost(o)),
+                num(c.orderProfit(o)),
+                o.items.joinToString(", ") { it.name + " × " + num(it.qty) },
+                o.note,
+            )
+            sb.append(cells.joinToString(";") { esc(it) }).append('\n')
+        }
+        return sb.toString()
+    }
+
     /** Пустой файл с заголовком и парой строк-примеров. */
     fun template(d: AppData, l: Lang): String {
         val c = Calc(d)
