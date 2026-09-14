@@ -6,6 +6,11 @@
 
 Kotlin · Jetpack Compose · minSdk 26 (Android 8.0) · без аналитики и рекламы.
 
+**[Скачать APK последней сборки](https://github.com/MerdanOchanov/kopeechka-android/releases/latest)** —
+тестовая сборка, подписана отладочным ключом. Резервные копии в Google Диск заработают
+только у аккаунтов, добавленных в тестировщики OAuth-клиента (см. [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md));
+всё остальное работает без интернета.
+
 <p align="center">
   <img src="docs/screenshots/home.png" width="30%" alt="Главный экран">
   <img src="docs/screenshots/report.png" width="30%" alt="Отчёты">
