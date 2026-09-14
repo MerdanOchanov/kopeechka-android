@@ -34,6 +34,7 @@ import app.kopeechka.finance.CurSheet
 import app.kopeechka.finance.Page
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.DriveBackup
 import app.kopeechka.finance.ui.theme.T
@@ -101,58 +102,94 @@ fun fmtRate(v: Double) = when {
 @Composable
 fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
     val col = T.c
+    val l = T.l
     val s = c.s
     val provider = Ai.provider(s.aiProvider)
     ScreenColumn(gap = 22.dp) {
         Column {
-            SectionTitle("Разделы")
+            SectionTitle(l.t("set.sections"))
             Spacer(Modifier.height(4.dp))
-            val n = c.d.accounts.size
-            NavRow(Icons.Wallet, "Счета и карты", "$n ${plural(n, "счёт", "счёта", "счетов")} · ${c.fmtMain(c.totalMain)}") { vm.openPage(Page.ACCOUNTS) }
-            val nc = c.d.categories.size
-            NavRow(Icons.Tags, "Категории и лимиты", "$nc ${plural(nc, "категория", "категории", "категорий")} · цвета и лимиты") { vm.openPage(Page.CATEGORIES) }
-            val ng = c.d.goals.size
-            NavRow(Icons.Target, "Цели и накопления", if (ng == 0) "Пока нет целей" else "$ng ${plural(ng, "цель", "цели", "целей")}") { vm.openPage(Page.GOALS) }
-            val ncur = c.currencies.size
-            NavRow(Icons.Rate, "Валюты и курсы", "$ncur ${plural(ncur, "валюта", "валюты", "валют")} · основная ${c.main}") { vm.openPage(Page.CURRENCIES) }
+            NavRow(Icons.Wallet, l.t("set.accounts"), "${l.n(c.d.accounts.size, "account")} · ${c.fmtMain(c.totalMain)}") { vm.openPage(Page.ACCOUNTS) }
+            NavRow(Icons.Tags, l.t("set.categories"), l.t("set.categoriesSub", l.n(c.d.categories.size, "category"))) { vm.openPage(Page.CATEGORIES) }
+            NavRow(
+                Icons.Target,
+                l.t("set.goals"),
+                if (c.d.goals.isEmpty()) l.t("set.goalsEmpty") else l.n(c.d.goals.size, "goal"),
+            ) { vm.openPage(Page.GOALS) }
+            NavRow(Icons.Rate, l.t("set.currencies"), l.t("set.currenciesSub", l.n(c.currencies.size, "currency"), c.main)) { vm.openPage(Page.CURRENCIES) }
             NavRow(
                 Icons.Cloud,
-                "Резервная копия",
-                if (!s.driveLinked) "Google Диск не подключён"
-                else if (s.lastBackupAt > 0) "Google Диск · " + DriveBackup.formatTime(Instant.ofEpochMilli(s.lastBackupAt))
-                else "Google Диск подключён",
+                l.t("set.backup"),
+                when {
+                    !s.driveLinked -> l.t("backup.driveNotLinked")
+                    s.lastBackupAt > 0 -> l.t("backup.drive") + " · " + DriveBackup.formatTime(Instant.ofEpochMilli(s.lastBackupAt), l)
+                    else -> l.t("backup.driveLinked")
+                },
             ) { vm.openPage(Page.BACKUP) }
-            NavRow(Icons.Spark, "ИИ-советник", "${provider.name} · " + if (vm.hasKey(provider.key) || !provider.needsKey) "готов" else "без ключа — офлайн-разбор") { vm.openAdvisor() }
+            NavRow(
+                Icons.Spark,
+                l.t("set.advisor"),
+                provider.name(l) + " · " + if (vm.hasKey(provider.key) || !provider.needsKey) l.t("common.ready") else l.t("set.advisorNoKey"),
+            ) { vm.openAdvisor() }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Основная валюта")
-            Muted("В ней считаются баланс, бюджеты и отчёты. Счета в других валютах пересчитываются по курсу.", 11.5f, color = col.n700)
+            SectionTitle(l.t("set.lang"))
+            Muted(l.t("set.langNote"), 11.5f, color = col.n700)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Lang.CODES.forEach { code ->
+                    val st = opt(s.lang == code)
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .background(st.bg)
+                            .hairline(st.border)
+                            .tap { vm.setLang(code) }
+                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (code == "auto") l.t("set.lang.auto") else Lang.title(code),
+                            style = T.b(11.5.sp, st.fg),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.mainCur"))
+            Muted(l.t("set.mainCurNote"), 11.5f, color = col.n700)
             CurrencyGrid(c.currencies, c.main) { vm.setMainCur(it) }
-            GhostButton("Добавить валюту", { vm.currencyPicker = true }, size = 12)
+            GhostButton(l.t("set.addCur"), { vm.currencyPicker = true }, size = 12)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            SectionTitle("Валюта счетов")
+            SectionTitle(l.t("set.accCur"))
             c.d.accounts.forEach { a ->
                 val bal = c.balances[a.id] ?: 0.0
-                SettingRow(a.name, "${c.fmt(bal, a.cur)} · " + if (a.cur == c.main) "в основной валюте" else "≈ ${c.fmtMain(c.toMain(bal, a.cur))}") {
+                SettingRow(
+                    a.name,
+                    "${c.fmt(bal, a.cur)} · " + if (a.cur == c.main) l.t("set.inMainCur") else "≈ ${c.fmtMain(c.toMain(bal, a.cur))}",
+                ) {
                     SecondaryButton("${a.cur} ${Currencies.sym(a.cur)}", { vm.curSheet = CurSheet.Acc(a.id) })
                 }
             }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Оформление")
-            Segments(listOf("Светлая", "Тёмная"), if (s.dark) 1 else 0, { vm.setDark(it == 1) })
-            SettingRow("Показывать копейки", "В суммах, списках и отчётах") {
+            SectionTitle(l.t("set.look"))
+            Segments(listOf(l.t("set.light"), l.t("set.dark")), if (s.dark) 1 else 0, { vm.setDark(it == 1) })
+            SettingRow(l.t("set.kopecks"), l.t("set.kopecksSub")) {
                 Toggle(s.showKopecks) { v -> vm.settings { it.copy(showKopecks = v) } }
             }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Напоминания")
-            SettingRow("Напоминать записать расходы", "Каждый вечер в ${s.remindHour}:00") {
+            SectionTitle(l.t("set.reminders"))
+            SettingRow(l.t("set.remind"), l.t("set.remindSub", s.remindHour)) {
                 Toggle(s.remind) { on -> if (on) onEnableReminder() else vm.setRemind(false) }
             }
             if (s.remind) {
@@ -163,19 +200,16 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Профиль")
+            SectionTitle(l.t("set.profile"))
             var name by remember { mutableStateOf(s.userName) }
-            Field("Как к вам обращаться", name, { name = it; vm.settings { st -> st.copy(userName = it) } }, placeholder = "Например, Алина")
+            Field(l.t("set.name"), name, { name = it; vm.settings { st -> st.copy(userName = it) } }, placeholder = l.t("set.nameHint"))
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Данные")
-            SecondaryButton("Загрузить демо-данные", { vm.askLoadDemo() }, Modifier.fillMaxWidth(), size = 13, upper = true)
-            DangerButton("Очистить все данные", { vm.askClearAll() })
-            Muted(
-                "Копеечка 1.0 · данные хранятся только на этом телефоне. В интернет уходят лишь резервные копии (в ваш Google Диск) и вопросы ИИ-советнику — когда вы сами их отправляете.",
-                10.5f,
-            )
+            SectionTitle(l.t("set.data"))
+            SecondaryButton(l.t("set.loadDemo"), { vm.askLoadDemo() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            DangerButton(l.t("set.clearAll"), { vm.askClearAll() })
+            Muted(l.t("set.about"), 10.5f)
         }
     }
 }
@@ -185,14 +219,10 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
 @Composable
 fun CurrenciesPage(vm: AppViewModel, c: Calc) {
     val col = T.c
+    val l = T.l
     ScreenColumn(gap = 16.dp) {
-        PageHeader("Валюты и курсы") { vm.page = null }
-        Muted(
-            "Курс — сколько рублей стоит одна единица валюты. Рубль здесь база, его курс всегда 1. " +
-                "Курсы задаются вручную: приложение никуда не ходит за ними и не требует интернета.",
-            11.5f,
-            color = col.n700,
-        )
+        PageHeader(l.t("cur.title")) { vm.page = null }
+        Muted(l.t("cur.note"), 11.5f, color = col.n700)
         Column {
             c.currencies.forEach { code ->
                 val info = Currencies.info(code)
@@ -208,34 +238,30 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
                             Text(
                                 buildList {
                                     add(code)
-                                    if (code == c.main) add("основная")
-                                    if (used > 0) add("используется в $used ${plural(used, "месте", "местах", "местах")}")
-                                    if (!Currencies.inCatalog(code)) add("своя")
+                                    if (code == c.main) add(l.t("cur.main"))
+                                    if (used > 0) add(l.t("cur.usedIn", l.n(used, "place")))
+                                    if (!Currencies.inCatalog(code)) add(l.t("cur.own"))
                                 }.joinToString(" · "),
                                 style = T.b(11.sp, col.n600),
                             )
                         }
                         if (isBase) {
-                            Text("база", style = T.b(11.5.sp, col.n600))
+                            Text(l.t("cur.base"), style = T.b(11.5.sp, col.n600))
                         } else {
                             RateField(vm, code, c.rate(code))
                         }
                     }
                     if (!isBase && code != c.main && used == 0) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            GhostButton("Убрать валюту", { vm.removeCurrency(code) }, size = 11)
+                            GhostButton(l.t("cur.remove"), { vm.removeCurrency(code) }, size = 11)
                         }
                     }
                 }
                 SoftDivider()
             }
         }
-        AddButton("+ Добавить валюту") { vm.currencyPicker = true }
-        Muted(
-            "Туркменский манат (TMT) уже в списке. Любую другую мировую валюту можно выбрать из каталога, " +
-                "а если её там нет — завести свою с собственным кодом и символом.",
-            11f,
-        )
+        AddButton(l.t("cur.add")) { vm.currencyPicker = true }
+        Muted(l.t("cur.footer"), 11f)
     }
 }
 
@@ -247,7 +273,7 @@ private fun RateField(vm: AppViewModel, code: String, rate: Double) {
         Box(Modifier.width(104.dp)) {
             Field(null, text, { text = it; vm.setRate(code, it) }, numeric = true, placeholder = "0")
         }
-        Text("₽", style = T.b(14.sp, col.n700))
+        Text(Currencies.sym(Currencies.BASE), style = T.b(14.sp, col.n700))
     }
 }
 
@@ -256,10 +282,11 @@ private fun RateField(vm: AppViewModel, code: String, rate: Double) {
 @Composable
 fun AccountsPage(vm: AppViewModel, c: Calc) {
     val col = T.c
+    val l = T.l
     ScreenColumn(gap = 16.dp) {
-        PageHeader("Счета и карты") { vm.page = null }
+        PageHeader(l.t("acc.title")) { vm.page = null }
         Blueprint(Modifier.fillMaxWidth()) {
-            Kicker("Сумма по счетам в общем балансе")
+            Kicker(l.t("acc.sum"))
             Spacer(Modifier.height(3.dp))
             Text(c.fmtMain(c.totalMain), style = T.h(26.sp, col.text))
         }
@@ -271,7 +298,7 @@ fun AccountsPage(vm: AppViewModel, c: Calc) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    CodeBox(a.name.filter { it.isLetter() }.take(2).uppercase().ifBlank { "СЧ" }, 32.dp)
+                    CodeBox(a.name.filter { it.isLetter() }.take(2).uppercase().ifBlank { l.t("acc.short") }, 32.dp)
                     Column(Modifier.weight(1f)) {
                         Text(a.name, style = T.b(14.sp, col.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(listOf(a.type, a.mask, a.cur).filter { it.isNotBlank() }.joinToString(" · "), style = T.b(11.sp, col.n600))
@@ -279,7 +306,7 @@ fun AccountsPage(vm: AppViewModel, c: Calc) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text(c.fmt(bal, a.cur), style = T.h(15.sp, col.text))
                         Text(
-                            if (a.inTotal) "в общем балансе" else "не учитывается",
+                            if (a.inTotal) l.t("acc.inTotal") else l.t("acc.notInTotal"),
                             style = T.b(11.sp, if (a.inTotal) col.a700 else col.n500),
                             modifier = Modifier.tap { vm.toggleInTotal(a.id) }.padding(top = 2.dp),
                         )
@@ -288,8 +315,8 @@ fun AccountsPage(vm: AppViewModel, c: Calc) {
                 SoftDivider()
             }
         }
-        AddButton("+ Добавить счёт") { vm.openAccEdit(null) }
-        Muted("Нажмите на счёт, чтобы изменить название, баланс или валюту. «В общем балансе» — учитывать ли счёт в сумме на главном экране.", 11f)
+        AddButton(l.t("acc.add")) { vm.openAccEdit(null) }
+        Muted(l.t("acc.note"), 11f)
     }
 }
 
@@ -298,14 +325,15 @@ fun AccountsPage(vm: AppViewModel, c: Calc) {
 @Composable
 fun CategoriesPage(vm: AppViewModel, c: Calc) {
     val col = T.c
+    val l = T.l
     val spent = c.spentBy(c.monthTx)
     val earned = c.monthTx.filter { it.amount > 0 }.groupBy { it.cat }.mapValues { e -> e.value.sumOf { c.txMain(it) } }
     ScreenColumn(gap = 16.dp) {
-        PageHeader("Категории и лимиты") { vm.page = null }
-        Muted("Нажмите на категорию, чтобы задать лимит и выбрать цвет — он используется в бюджете, отчётах и списках.", 11f)
+        PageHeader(l.t("cat.title")) { vm.page = null }
+        Muted(l.t("cat.note"), 11f)
         listOf(false, true).forEach { income ->
             Column {
-                SectionTitle(if (income) "Доходы" else "Расходы") { Muted("за этот месяц") }
+                SectionTitle(if (income) l.t("cat.incomes") else l.t("cat.expenses")) { Muted(l.t("cat.thisMonth")) }
                 Spacer(Modifier.height(4.dp))
                 c.d.categories.filter { it.income == income }.forEach { cat ->
                     Row(
@@ -316,15 +344,20 @@ fun CategoriesPage(vm: AppViewModel, c: Calc) {
                         CodeBox(cat.code, 30.dp, catColor(c, cat.id), tinted = true)
                         Column(Modifier.weight(1f)) {
                             Text(cat.name, style = T.b(14.sp, col.text))
-                            if (!income) Text(if (cat.limitRub > 0) "лимит ${c.fmtMain(c.limitMain(cat))} в месяц" else "без лимита", style = T.b(11.sp, col.n600))
+                            if (!income) {
+                                Text(
+                                    if (cat.limitRub > 0) l.t("cat.limitMonth", c.fmtMain(c.limitMain(cat))) else l.t("cat.noLimit"),
+                                    style = T.b(11.sp, col.n600),
+                                )
+                            }
                         }
                         val v = if (income) earned[cat.id] else spent[cat.id]
-                        Text(v?.let { c.fmtMain(it) } ?: "—", style = T.h(13.sp, col.n700))
+                        Text(v?.let { c.fmtMain(it) } ?: l.t("common.dash"), style = T.h(13.sp, col.n700))
                     }
                     SoftDivider()
                 }
             }
-            AddButton(if (income) "+ Категория доходов" else "+ Категория расходов") { vm.openCatEdit(null, income) }
+            AddButton(if (income) l.t("cat.addIncome") else l.t("cat.addExpense")) { vm.openCatEdit(null, income) }
         }
     }
 }
@@ -334,9 +367,10 @@ fun CategoriesPage(vm: AppViewModel, c: Calc) {
 @Composable
 fun GoalsPage(vm: AppViewModel, c: Calc) {
     val col = T.c
+    val l = T.l
     ScreenColumn(gap = 18.dp) {
-        PageHeader("Цели и накопления") { vm.page = null }
-        if (c.d.goals.isEmpty()) Muted("Целей пока нет. Добавьте первую — например, «Отпуск» или «Резервный фонд».", 12f)
+        PageHeader(l.t("goal.title")) { vm.page = null }
+        if (c.d.goals.isEmpty()) Muted(l.t("goal.empty"), 12f)
         c.d.goals.forEach { g ->
             val pct = if (g.target > 0) (g.saved / g.target * 100).roundToInt() else 0
             Blueprint(Modifier.fillMaxWidth(), PaddingValues(16.dp)) {
@@ -350,21 +384,23 @@ fun GoalsPage(vm: AppViewModel, c: Calc) {
                 Row {
                     Text(c.fmt(g.saved, g.cur), style = T.h(13.sp, col.text))
                     Spacer(Modifier.weight(1f))
-                    Text("цель ${c.fmt(g.target, g.cur)}", style = T.b(12.sp, col.n600))
+                    Text(l.t("goal.target", c.fmt(g.target, g.cur)), style = T.b(12.sp, col.n600))
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        g.hint.ifBlank { if (pct >= 100) "Цель достигнута" else "осталось ${c.fmt(max(0.0, g.target - g.saved), g.cur)}" },
+                        g.hint.ifBlank {
+                            if (pct >= 100) l.t("goal.done") else l.t("goal.left", c.fmt(max(0.0, g.target - g.saved), g.cur))
+                        },
                         style = T.b(11.5.sp, col.n600),
                         modifier = Modifier.weight(1f),
                     )
-                    SecondaryButton("Отложить", { vm.openGoalSheet(g.id) })
+                    SecondaryButton(l.t("goal.put"), { vm.openGoalSheet(g.id) })
                 }
             }
         }
-        AddButton("+ Новая цель") { vm.openGoalEdit(null) }
-        Muted("«Отложить» списывает сумму с выбранного счёта и добавляет её к цели. Нажмите на название цели, чтобы изменить её.", 11f)
+        AddButton(l.t("goal.add")) { vm.openGoalEdit(null) }
+        Muted(l.t("goal.note"), 11f)
     }
 }
 
@@ -373,47 +409,43 @@ fun GoalsPage(vm: AppViewModel, c: Calc) {
 @Composable
 fun BackupPage(vm: AppViewModel, c: Calc) {
     val col = T.c
+    val l = T.l
     val s = c.s
     LaunchedEffect(Unit) { if (s.driveLinked && vm.driveList.isEmpty()) vm.refreshBackups() }
     ScreenColumn(gap = 16.dp) {
-        PageHeader("Резервная копия") { vm.page = null }
+        PageHeader(l.t("backup.title")) { vm.page = null }
         Blueprint(Modifier.fillMaxWidth()) {
-            Kicker("Google Диск")
+            Kicker(l.t("backup.drive"))
             Spacer(Modifier.height(4.dp))
-            Text(if (s.driveLinked) "Подключён" else "Не подключён", style = T.h(22.sp, col.text))
+            Text(if (s.driveLinked) l.t("backup.linked") else l.t("backup.notLinked"), style = T.h(22.sp, col.text))
             Spacer(Modifier.height(2.dp))
             Text(
-                if (s.lastBackupAt > 0) "Последняя копия: " + DriveBackup.formatTime(Instant.ofEpochMilli(s.lastBackupAt)) else "Копий ещё не было",
+                if (s.lastBackupAt > 0) l.t("backup.last", DriveBackup.formatTime(Instant.ofEpochMilli(s.lastBackupAt), l)) else l.t("backup.never"),
                 style = T.b(11.5.sp, col.n700),
             )
         }
-        Muted(
-            "Копия — один JSON-файл со всеми счетами, операциями, категориями, целями и настройками. API-ключи ИИ в копию не попадают. " +
-                "Файлы лежат в папке «Копеечка — резервные копии» на вашем Google Диске, хранятся 10 последних.",
-            11.5f,
-            color = col.n700,
-        )
+        Muted(l.t("backup.note"), 11.5f, color = col.n700)
         PrimaryButton(
             when {
-                vm.driveBusy -> "Подождите…"
-                s.driveLinked -> "Сохранить копию сейчас"
-                else -> "Подключить Диск и сохранить"
+                vm.driveBusy -> l.t("common.wait")
+                s.driveLinked -> l.t("backup.now")
+                else -> l.t("backup.connect")
             },
             { vm.backupNow() },
             enabled = !vm.driveBusy,
         )
-        SettingRow("Автоматически раз в день", if (s.driveLinked) "В фоне, по Wi-Fi" else "Сработает после подключения Диска") {
+        SettingRow(l.t("backup.auto"), if (s.driveLinked) l.t("backup.autoOn") else l.t("backup.autoOff")) {
             Toggle(s.autoBackup) { vm.setAutoBackup(it) }
         }
-        SectionTitle("Копии на Диске") { GhostButton("Обновить", { vm.refreshBackups() }) }
-        if (vm.driveList.isEmpty()) Muted(if (s.driveLinked) "Копий пока нет или список ещё загружается" else "Подключите Диск, чтобы увидеть копии", 12f)
+        SectionTitle(l.t("backup.list")) { GhostButton(l.t("common.refresh"), { vm.refreshBackups() }) }
+        if (vm.driveList.isEmpty()) Muted(if (s.driveLinked) l.t("backup.listEmpty") else l.t("backup.listNotLinked"), 12f)
         Column {
             vm.driveList.forEach { b ->
-                SettingRow(DriveBackup.formatTime(b.created), "${b.name} · ${max(1L, b.size / 1024)} КБ") {
-                    SecondaryButton("Восстановить", { vm.askRestore(b) })
+                SettingRow(DriveBackup.formatTime(b.created, l), "${b.name} · ${max(1L, b.size / 1024)} KB") {
+                    SecondaryButton(l.t("common.restore"), { vm.askRestore(b) })
                 }
             }
         }
-        if (s.driveLinked) GhostButton("Отключить Диск в приложении", { vm.unlinkDrive() })
+        if (s.driveLinked) GhostButton(l.t("backup.unlink"), { vm.unlinkDrive() })
     }
 }

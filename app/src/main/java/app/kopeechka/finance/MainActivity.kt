@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) vm.setRemind(true) else vm.flash("Без разрешения на уведомления напоминание не придёт")
+        if (granted) vm.setRemind(true) else vm.flash(vm.l.t("msg.noNotifyPermission"))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

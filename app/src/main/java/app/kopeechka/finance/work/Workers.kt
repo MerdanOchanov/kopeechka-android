@@ -18,9 +18,10 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import app.kopeechka.finance.KopeechkaApp
 import app.kopeechka.finance.MainActivity
 import app.kopeechka.finance.R
-import app.kopeechka.finance.KopeechkaApp
+import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.net.DriveBackup
 import java.time.Duration
 import java.time.LocalDateTime
@@ -59,9 +60,10 @@ object Schedules {
         wm.enqueueUniquePeriodicWork(REMIND, ExistingPeriodicWorkPolicy.UPDATE, req)
     }
 
-    fun ensureChannel(ctx: Context) {
+    /** Канал уведомлений называется на языке интерфейса. */
+    fun ensureChannel(ctx: Context, l: Lang = Lang.fromSystem()) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Напоминания", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, l.t("notify.channel"), NotificationManager.IMPORTANCE_DEFAULT))
     }
 }
 
@@ -88,18 +90,19 @@ class BackupWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
 class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+        val l = Lang.of((ctx as KopeechkaApp).store.current.settings.lang)
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return Result.success()
-        Schedules.ensureChannel(ctx)
+        Schedules.ensureChannel(ctx, l)
         val open = PendingIntent.getActivity(
             ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
         val n = NotificationCompat.Builder(ctx, Schedules.CHANNEL)
             .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("Копеечка")
-            .setContentText("Запишите сегодняшние расходы — это пара секунд")
+            .setContentTitle(l.t("app.name"))
+            .setContentText(l.t("notify.text"))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

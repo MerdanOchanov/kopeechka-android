@@ -318,22 +318,30 @@ fun SoftDivider() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(T.c.soft))
 }
 
+/**
+ * Цифровая клавиатура. `fill = true` растягивает её на всю доступную высоту —
+ * так экран новой операции обходится без вертикальной прокрутки.
+ */
 @Composable
-fun Keypad(onKey: (String) -> Unit) {
+fun Keypad(modifier: Modifier = Modifier, fill: Boolean = false, onKey: (String) -> Unit) {
     val c = T.c
     val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "000", "0", "⌫")
-    Column(Modifier.fillMaxWidth().background(c.divider).hairline(c.divider)) {
+    Column(modifier.fillMaxWidth().background(c.divider).hairline(c.divider)) {
         keys.chunked(3).forEachIndexed { r, row ->
             if (r > 0) Spacer(Modifier.height(1.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (fill) Modifier.weight(1f) else Modifier),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
                 row.forEach { k ->
                     Box(
                         Modifier
                             .weight(1f)
-                            .heightIn(min = 52.dp)
+                            .then(if (fill) Modifier.fillMaxHeight() else Modifier.heightIn(min = 52.dp))
                             .background(c.bg)
-                            .tap { onKey(k) }
-                            .padding(vertical = 12.dp),
+                            .tap { onKey(k) },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(k, style = T.h(22.sp, c.text))
@@ -506,7 +514,7 @@ fun OverlayScreen(
 fun PageHeader(title: String, onBack: () -> Unit) {
     val c = T.c
     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        IconSquare(Icons.Back, onBack, "Назад")
+        IconSquare(Icons.Back, onBack, T.l.t("common.back"))
         Text(title.uppercase(), style = T.h(17.sp, c.text, 0.08.em))
     }
 }

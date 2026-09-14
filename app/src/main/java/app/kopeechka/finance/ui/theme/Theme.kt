@@ -140,9 +140,13 @@ object KopeechkaFonts {
 }
 
 val LocalColors = staticCompositionLocalOf { LightColors }
+val LocalLang = staticCompositionLocalOf { app.kopeechka.finance.data.Lang.RU }
 
 object T {
     val c: KopeechkaColors @Composable get() = LocalColors.current
+
+    /** Язык интерфейса: `T.l.t("home.total")`. */
+    val l: app.kopeechka.finance.data.Lang @Composable get() = LocalLang.current
 
     fun h(size: TextUnit, color: Color, spacing: TextUnit = 0.sp, lineHeight: TextUnit = TextUnit.Unspecified) =
         TextStyle(fontFamily = KopeechkaFonts.heading, fontSize = size, color = color, letterSpacing = spacing, lineHeight = lineHeight)

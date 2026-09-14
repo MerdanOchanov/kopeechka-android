@@ -7,18 +7,18 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-enum class Period(val label: String) {
-    WEEK("Неделя"),
-    MONTH("Месяц"),
-    QUARTER("Квартал"),
-    YEAR("Год"),
+enum class Period(val key: String, val noteKey: String) {
+    WEEK("period.week", "period.note.week"),
+    MONTH("period.month", "period.note.month"),
+    QUARTER("period.quarter", "period.note.quarter"),
+    YEAR("period.year", "period.note.year"),
 }
 
-enum class Cut(val label: String, val title: String) {
-    CATS("Категории", "Разрез по категориям"),
-    ACCS("Счета", "Разрез по счетам"),
-    DAYS("Дни недели", "Разрез по дням недели"),
-    IO("Доходы / расходы", "Доходы против расходов"),
+enum class Cut(val key: String, val titleKey: String) {
+    CATS("cut.cats", "cut.title.cats"),
+    ACCS("cut.accs", "cut.title.accs"),
+    DAYS("cut.days", "cut.title.days"),
+    IO("cut.io", "cut.title.io"),
 }
 
 /** Календарный отрезок отчёта: неделя, месяц, квартал или год со сдвигом назад. */
@@ -34,7 +34,11 @@ data class Bar(val label: String, val value: Double, val highlight: Boolean)
 data class Slice(val name: String, val value: Double, val pct: String, val color: String? = null)
 
 /** Все вычисления над данными: балансы, бюджеты, отчёты. Суммы — в основной валюте. */
-class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
+class Calc(
+    val d: AppData,
+    val today: LocalDate = LocalDate.now(),
+    val l: Lang = Lang.of(d.settings.lang),
+) {
     val s = d.settings
     val main = s.mainCur
     val todayDay = today.toEpochDay()
@@ -51,9 +55,9 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
 
     fun acc(id: String?) = d.accounts.firstOrNull { it.id == id }
     fun cat(id: String): Category = when (id) {
-        CAT_TRANSFER -> Category(CAT_TRANSFER, "ПВ", "Перевод", color = "#5D5D60")
-        CAT_GOAL -> Category(CAT_GOAL, "ЦЛ", "Цель", color = "#597EA3")
-        else -> d.categories.firstOrNull { it.id == id } ?: Category(id, "ПЧ", "Прочее")
+        CAT_TRANSFER -> Category(CAT_TRANSFER, l.t("cat.code.transfer"), l.t("kind.transfer"), color = "#5D5D60")
+        CAT_GOAL -> Category(CAT_GOAL, l.t("cat.code.goal"), l.t("goal.one"), color = "#597EA3")
+        else -> d.categories.firstOrNull { it.id == id } ?: Category(id, "??", l.t("demo.cat.other"))
     }
 
     /** Цвет категории: свой из палитры либо запасной по позиции в списке. */
@@ -100,11 +104,11 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
     // ——— подписи ———
     fun dayLabel(day: Long): String {
         val diff = todayDay - day
-        if (diff == 0L) return "Сегодня"
-        if (diff == 1L) return "Вчера"
+        if (diff == 0L) return l.t("date.today")
+        if (diff == 1L) return l.t("date.yesterday")
         val dt = LocalDate.ofEpochDay(day)
-        val m = MONTHS_GEN[dt.monthValue - 1]
-        return if (dt.year == today.year) "${dt.dayOfMonth} $m" else "${dt.dayOfMonth} $m ${dt.year}"
+        val m = l.monthsGen[dt.monthValue - 1]
+        return if (dt.year == today.year) l.t("date.dm", dt.dayOfMonth, m) else l.t("date.dmy", dt.dayOfMonth, m, dt.year)
     }
 
     // ——— периоды отчётов ———
@@ -115,29 +119,29 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
             val start = today.with(DayOfWeek.MONDAY).plusWeeks(offset.toLong())
             val end = start.plusDays(6)
             val title = if (start.month == end.month) {
-                "${start.dayOfMonth}–${end.dayOfMonth} ${MONTHS_GEN[start.monthValue - 1]}"
+                l.t("date.weekRange", start.dayOfMonth, end.dayOfMonth, l.monthsGen[start.monthValue - 1])
             } else {
-                "${start.dayOfMonth} ${MONTHS_SHORT[start.monthValue - 1]} – ${end.dayOfMonth} ${MONTHS_SHORT[end.monthValue - 1]}"
+                l.t("date.weekRangeCross", start.dayOfMonth, l.monthsShort[start.monthValue - 1], end.dayOfMonth, l.monthsShort[end.monthValue - 1])
             }
-            Range(start.toEpochDay(), end.toEpochDay(), title, "за неделю")
+            Range(start.toEpochDay(), end.toEpochDay(), title, l.t(p.noteKey))
         }
         Period.MONTH -> {
             val start = today.withDayOfMonth(1).plusMonths(offset.toLong())
             val end = start.withDayOfMonth(start.lengthOfMonth())
-            val title = MONTHS_NOM[start.monthValue - 1] + if (start.year != today.year) " ${start.year}" else ""
-            Range(start.toEpochDay(), end.toEpochDay(), title, "за месяц")
+            val title = l.months[start.monthValue - 1] + if (start.year != today.year) " ${start.year}" else ""
+            Range(start.toEpochDay(), end.toEpochDay(), title, l.t(p.noteKey))
         }
         Period.QUARTER -> {
             val base = today.withDayOfMonth(1).minusMonths(((today.monthValue - 1) % 3).toLong()).plusMonths(offset * 3L)
             val last = base.plusMonths(2)
             val end = last.withDayOfMonth(last.lengthOfMonth())
-            val title = ROMAN[(base.monthValue - 1) / 3] + " квартал" + if (base.year != today.year) " ${base.year}" else ""
-            Range(base.toEpochDay(), end.toEpochDay(), title, "за квартал")
+            val title = l.t("date.quarter", ROMAN[(base.monthValue - 1) / 3]) + if (base.year != today.year) " ${base.year}" else ""
+            Range(base.toEpochDay(), end.toEpochDay(), title, l.t(p.noteKey))
         }
         Period.YEAR -> {
             val start = today.withDayOfYear(1).plusYears(offset.toLong())
             val end = start.withDayOfYear(start.lengthOfYear())
-            Range(start.toEpochDay(), end.toEpochDay(), start.year.toString() + " год", "за год")
+            Range(start.toEpochDay(), end.toEpochDay(), l.t("date.year", start.year), l.t(p.noteKey))
         }
     }
 
@@ -164,15 +168,15 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
             Cut.DAYS -> {
                 val agg = DoubleArray(7)
                 within.forEach { if (it.amount < 0) agg[weekday(it.date)] -= txMain(it) }
-                agg.withIndex().sortedByDescending { it.value }.map { Slice(WEEK_FULL[it.index], it.value, pct(it.value)) }
+                agg.withIndex().sortedByDescending { it.value }.map { Slice(l.weekFull[it.index], it.value, pct(it.value)) }
             }
             Cut.IO -> {
                 val inc = incomeIn(r)
                 val sum = if (inc + exp > 0) inc + exp else 1.0
                 listOf(
-                    Slice("Доходы", inc, (inc / sum * 100).roundToInt().toString() + "%"),
-                    Slice("Расходы", exp, (exp / sum * 100).roundToInt().toString() + "%"),
-                    Slice("Сальдо", inc - exp, "—"),
+                    Slice(l.t("report.incomes"), inc, (inc / sum * 100).roundToInt().toString() + "%"),
+                    Slice(l.t("report.expenses"), exp, (exp / sum * 100).roundToInt().toString() + "%"),
+                    Slice(l.t("report.saldo"), inc - exp, "—"),
                 )
             }
         }
@@ -186,11 +190,11 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
             cut == Cut.DAYS -> {
                 val agg = DoubleArray(7)
                 exp.filter { it.date in r.from..r.to }.forEach { agg[weekday(it.date)] -= txMain(it) }
-                WEEK.indices.map { WEEK[it] to agg[it] }
+                (0..6).map { l.week[it] to agg[it] }
             }
             p == Period.WEEK -> (0..6).map { i ->
                 val day = LocalDate.ofEpochDay(r.from).plusDays(i.toLong())
-                WEEK[i] to sum(day.toEpochDay(), day.toEpochDay())
+                l.week[i] to sum(day.toEpochDay(), day.toEpochDay())
             }
             p == Period.MONTH -> {
                 val start = LocalDate.ofEpochDay(r.from)
@@ -206,11 +210,11 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
             }
             p == Period.QUARTER -> (0..2).map { i ->
                 val m = LocalDate.ofEpochDay(r.from).plusMonths(i.toLong())
-                MONTHS_SHORT[m.monthValue - 1] to sum(m.toEpochDay(), m.withDayOfMonth(m.lengthOfMonth()).toEpochDay())
+                l.monthsShort[m.monthValue - 1] to sum(m.toEpochDay(), m.withDayOfMonth(m.lengthOfMonth()).toEpochDay())
             }
             else -> (0..11).map { i ->
                 val m = LocalDate.ofEpochDay(r.from).plusMonths(i.toLong())
-                MONTHS_SHORT[m.monthValue - 1] to sum(m.toEpochDay(), m.withDayOfMonth(m.lengthOfMonth()).toEpochDay())
+                l.monthsShort[m.monthValue - 1] to sum(m.toEpochDay(), m.withDayOfMonth(m.lengthOfMonth()).toEpochDay())
             }
         }
         val mx = raw.maxOfOrNull { it.second } ?: 0.0
@@ -224,7 +228,7 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
             val m = today.minusMonths(back.toLong())
             val from = m.withDayOfMonth(1).toEpochDay()
             val to = m.withDayOfMonth(m.lengthOfMonth()).toEpochDay()
-            MONTHS_SHORT[m.monthValue - 1] to exp.filter { it.date in from..to }.sumOf { -txMain(it) }
+            l.monthsShort[m.monthValue - 1] to exp.filter { it.date in from..to }.sumOf { -txMain(it) }
         }
         val mx = raw.maxOfOrNull { it.second } ?: 0.0
         return raw.map { Bar(it.first, it.second, it.second > 0 && it.second == mx) }
@@ -236,7 +240,7 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
         val exp = d.txs.filter { isReal(it) && it.amount < 0 }
         val raw = (0..6).map { i ->
             val day = LocalDate.ofEpochDay(r.from).plusDays(i.toLong()).toEpochDay()
-            WEEK[i] to exp.filter { it.date == day }.sumOf { -txMain(it) }
+            l.week[i] to exp.filter { it.date == day }.sumOf { -txMain(it) }
         }
         val mx = raw.maxOfOrNull { it.second } ?: 0.0
         return raw.map { Bar(it.first, it.second, it.second > 0 && it.second == mx) }
@@ -259,19 +263,14 @@ class Calc(val d: AppData, val today: LocalDate = LocalDate.now()) {
         val top = breakdown(r, Cut.CATS).firstOrNull()
         val biggest = within.filter { it.amount < 0 }.minByOrNull { it.amount }
         return listOfNotNull(
-            "Средний расход в день" to fmtMain(exp / elapsedDays(r)),
-            "Самая дорогая категория" to (top?.let { "${it.name} · ${fmtMain(it.value)}" } ?: "—"),
-            biggest?.let { "Крупнейшая трата" to "${it.title} · ${fmt(abs(it.amount), accCur(it.acc))}" },
-            "Операций за период" to within.size.toString(),
+            l.t("report.fact.avg") to fmtMain(exp / elapsedDays(r)),
+            l.t("report.fact.topCat") to (top?.let { "${it.name} · ${fmtMain(it.value)}" } ?: l.t("common.dash")),
+            biggest?.let { l.t("report.fact.biggest") to "${it.title} · ${fmt(abs(it.amount), accCur(it.acc))}" },
+            l.t("report.fact.count") to within.size.toString(),
         )
     }
 
     companion object {
-        val WEEK = listOf("пн", "вт", "ср", "чт", "пт", "сб", "вс")
-        val WEEK_FULL = listOf("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
-        val MONTHS_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
-        val MONTHS_NOM = listOf("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
-        val MONTHS_GEN = listOf("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря")
         val ROMAN = listOf("I", "II", "III", "IV")
     }
 }

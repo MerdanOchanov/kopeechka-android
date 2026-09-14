@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,56 +37,61 @@ import app.kopeechka.finance.Tab
 import app.kopeechka.finance.data.AppData
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.ui.theme.LocalLang
 import app.kopeechka.finance.ui.theme.T
 
 @Composable
 fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit) {
-    val c = T.c
-    val calc = remember(data) { Calc(data) }
-    val onboarding = !data.settings.onboarded
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(if (onboarding) c.hero else c.bg)
-            .systemBarsPadding()
-            .imePadding(),
-    ) {
-        if (onboarding) {
-            Onboarding(vm)
-        } else {
-            Column(Modifier.fillMaxSize()) {
-                Header(vm, calc)
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    when (vm.tab) {
-                        Tab.HOME -> HomeScreen(vm, calc)
-                        Tab.OPS -> OpsScreen(vm, calc)
-                        Tab.BUDGET -> BudgetScreen(vm, calc)
-                        Tab.REPORT -> ReportScreen(vm, calc)
-                        Tab.SETTINGS -> when (vm.page) {
-                            null -> SettingsScreen(vm, calc, onEnableReminder)
-                            Page.ACCOUNTS -> AccountsPage(vm, calc)
-                            Page.CATEGORIES -> CategoriesPage(vm, calc)
-                            Page.GOALS -> GoalsPage(vm, calc)
-                            Page.BACKUP -> BackupPage(vm, calc)
-                            Page.CURRENCIES -> CurrenciesPage(vm, calc)
+    val lang = remember(data.settings.lang) { Lang.of(data.settings.lang) }
+    CompositionLocalProvider(LocalLang provides lang) {
+        val c = T.c
+        val calc = remember(data, lang) { Calc(data, l = lang) }
+        val onboarding = !data.settings.onboarded
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(if (onboarding) c.hero else c.bg)
+                .systemBarsPadding()
+                .imePadding(),
+        ) {
+            if (onboarding) {
+                Onboarding(vm)
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    Header(vm, calc)
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when (vm.tab) {
+                            Tab.HOME -> HomeScreen(vm, calc)
+                            Tab.OPS -> OpsScreen(vm, calc)
+                            Tab.BUDGET -> BudgetScreen(vm, calc)
+                            Tab.REPORT -> ReportScreen(vm, calc)
+                            Tab.SETTINGS -> when (vm.page) {
+                                null -> SettingsScreen(vm, calc, onEnableReminder)
+                                Page.ACCOUNTS -> AccountsPage(vm, calc)
+                                Page.CATEGORIES -> CategoriesPage(vm, calc)
+                                Page.GOALS -> GoalsPage(vm, calc)
+                                Page.BACKUP -> BackupPage(vm, calc)
+                                Page.CURRENCIES -> CurrenciesPage(vm, calc)
+                            }
                         }
                     }
+                    BottomNav(vm)
                 }
-                BottomNav(vm)
-            }
 
-            vm.draft?.let { AddOverlay(vm, calc, it) }
-            if (vm.advisorOpen) AdvisorOverlay(vm, data)
-            if (vm.currencyPicker) CurrencyPickerOverlay(vm, calc)
-            vm.accEdit?.let { AccEditOverlay(vm, calc, it) }
-            vm.catEdit?.let { CatEditOverlay(vm, calc, it) }
-            vm.goalEdit?.let { GoalEditOverlay(vm, it) }
-            vm.curSheet?.let { CurrencySheet(vm, calc, it) }
-            vm.goalSheet?.let { GoalContributeSheet(vm, calc, it) }
-        }
-        vm.confirm?.let { ConfirmSheet(vm, it) }
-        vm.toast?.let {
-            Toast(it, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 76.dp))
+                vm.draft?.let { AddOverlay(vm, calc, it) }
+                if (vm.advisorOpen) AdvisorOverlay(vm, data)
+                if (vm.currencyPicker) CurrencyPickerOverlay(vm, calc)
+                vm.accEdit?.let { AccEditOverlay(vm, calc, it) }
+                vm.catEdit?.let { CatEditOverlay(vm, calc, it) }
+                vm.goalEdit?.let { GoalEditOverlay(vm, it) }
+                vm.curSheet?.let { CurrencySheet(vm, calc, it) }
+                vm.goalSheet?.let { GoalContributeSheet(vm, calc, it) }
+            }
+            vm.confirm?.let { ConfirmSheet(vm, it) }
+            vm.toast?.let {
+                Toast(it, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 76.dp))
+            }
         }
     }
 }
@@ -93,13 +99,18 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
 @Composable
 private fun Header(vm: AppViewModel, calc: Calc) {
     val c = T.c
+    val l = T.l
     Column {
         Row(
             Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("КОПЕЕЧКА", style = T.h(15.sp, c.text, 0.14.em), modifier = Modifier.tapNoRipple { vm.go(Tab.HOME) })
+            Text(
+                l.t("app.name").uppercase(),
+                style = T.h(15.sp, c.text, 0.14.em),
+                modifier = Modifier.tapNoRipple { vm.go(Tab.HOME) },
+            )
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier
@@ -109,8 +120,12 @@ private fun Header(vm: AppViewModel, calc: Calc) {
             ) {
                 Text("${calc.main} ${Currencies.sym(calc.main)}", style = T.h(11.sp, c.text, 0.12.em))
             }
-            IconSquare(if (calc.s.dark) Icons.Sun else Icons.Moon, { vm.setDark(!calc.s.dark) }, if (calc.s.dark) "Светлая тема" else "Тёмная тема")
-            IconSquare(Icons.Gear, { vm.go(Tab.SETTINGS) }, "Настройки")
+            IconSquare(
+                if (calc.s.dark) Icons.Sun else Icons.Moon,
+                { vm.setDark(!calc.s.dark) },
+                if (calc.s.dark) l.t("nav.themeLight") else l.t("nav.themeDark"),
+            )
+            IconSquare(Icons.Gear, { vm.go(Tab.SETTINGS) }, l.t("nav.settings"))
         }
         Divider()
     }
@@ -121,11 +136,12 @@ private enum class Glyph { PLAIN, LEFT, BOTTOM, TOP }
 @Composable
 private fun BottomNav(vm: AppViewModel) {
     val c = T.c
+    val l = T.l
     Column(Modifier.background(c.bg)) {
         Divider()
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            NavItem("Обзор", Glyph.PLAIN, vm.tab == Tab.HOME) { vm.go(Tab.HOME) }
-            NavItem("Операции", Glyph.LEFT, vm.tab == Tab.OPS) { vm.go(Tab.OPS) }
+            NavItem(l.t("nav.home"), Glyph.PLAIN, vm.tab == Tab.HOME) { vm.go(Tab.HOME) }
+            NavItem(l.t("nav.ops"), Glyph.LEFT, vm.tab == Tab.OPS) { vm.go(Tab.OPS) }
             Box(Modifier.weight(1f).padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
                 Box(
                     Modifier
@@ -139,8 +155,8 @@ private fun BottomNav(vm: AppViewModel) {
                     Text("+", style = T.b(26.sp, Color.White))
                 }
             }
-            NavItem("Бюджет", Glyph.BOTTOM, vm.tab == Tab.BUDGET) { vm.go(Tab.BUDGET) }
-            NavItem("Отчёты", Glyph.TOP, vm.tab == Tab.REPORT) { vm.go(Tab.REPORT) }
+            NavItem(l.t("nav.budget"), Glyph.BOTTOM, vm.tab == Tab.BUDGET) { vm.go(Tab.BUDGET) }
+            NavItem(l.t("nav.reports"), Glyph.TOP, vm.tab == Tab.REPORT) { vm.go(Tab.REPORT) }
         }
     }
 }
@@ -168,26 +184,18 @@ private fun RowScope.NavItem(label: String, glyph: Glyph, on: Boolean, onClick: 
                 Glyph.PLAIN -> Unit
             }
         }
-        Text(label.uppercase(), style = T.h(10.5.sp, color, 0.1.em), maxLines = 1)
+        Text(label.uppercase(), style = T.h(10.5.sp, color, 0.08.em), maxLines = 1)
     }
 }
-
-private data class Onb(val title: String, val body: String, val cta: String)
-
-private val ONB = listOf(
-    Onb("Все деньги в одном месте", "Карты, наличные и накопления в разных валютах считаются вместе. Баланс всегда под рукой.", "Дальше"),
-    Onb("Расход — за пять секунд", "Сумма, категория, счёт. Кнопка «плюс» всегда в центре экрана.", "Дальше"),
-    Onb("Бюджет подскажет, где притормозить", "Лимиты по категориям, отчёты в четырёх разрезах, цели и ИИ-советник по вашим данным.", "Начать с примерами"),
-)
 
 @Composable
 private fun Onboarding(vm: AppViewModel) {
     val c = T.c
-    val step = vm.onbStep.coerceIn(0, ONB.lastIndex)
-    val o = ONB[step]
+    val l = T.l
+    val step = vm.onbStep.coerceIn(0, 2)
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-            ONB.indices.forEach { i ->
+            (0..2).forEach { i ->
                 Box(Modifier.width(if (i == step) 26.dp else 8.dp).height(4.dp).background(if (i == step) c.a300 else c.hairline))
             }
         }
@@ -199,24 +207,24 @@ private fun Onboarding(vm: AppViewModel) {
                 .blueprintMarks(c.onAccent.copy(alpha = 0.7f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text("₽", style = T.h(30.sp, c.a300))
+            Text(Currencies.sym(Currencies.BASE), style = T.h(30.sp, c.a300))
         }
         Spacer(Modifier.height(22.dp))
-        Text(o.title, style = T.h(38.sp, c.onAccent, (-0.01).em, 40.sp))
+        Text(l.t("onb.${step + 1}.title"), style = T.h(38.sp, c.onAccent, (-0.01).em, 40.sp))
         Spacer(Modifier.height(16.dp))
-        Text(o.body, style = T.b(17.sp, c.a300, lineHeight = 25.sp))
+        Text(l.t("onb.${step + 1}.body"), style = T.b(17.sp, c.a300, lineHeight = 25.sp))
         Spacer(Modifier.weight(1f))
-        PrimaryButton(o.cta, {
-            if (step < ONB.lastIndex) vm.onbStep = step + 1 else vm.finishOnboarding()
+        PrimaryButton(if (step < 2) l.t("onb.next") else l.t("onb.start"), {
+            if (step < 2) vm.onbStep = step + 1 else vm.finishOnboarding()
         })
         Spacer(Modifier.height(10.dp))
         Text(
-            if (step < ONB.lastIndex) "Пропустить" else "Начать с чистого листа",
+            if (step < 2) l.t("onb.skip") else l.t("onb.clean"),
             style = T.h(14.sp, c.a300, 0.08.em),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .tap { if (step < ONB.lastIndex) vm.onbStep = ONB.lastIndex else vm.startClean() }
+                .tap { if (step < 2) vm.onbStep = 2 else vm.startClean() }
                 .padding(12.dp),
         )
     }

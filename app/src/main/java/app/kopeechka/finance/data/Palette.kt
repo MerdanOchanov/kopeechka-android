@@ -2,21 +2,23 @@ package app.kopeechka.finance.data
 
 /** Палитра для категорий: приглушённые тона, которые не спорят со стальным акцентом Industry. */
 object Palette {
-    data class Swatch(val hex: String, val name: String)
+    data class Swatch(val hex: String, val key: String) {
+        fun name(l: Lang) = l.t(key)
+    }
 
     val COLORS = listOf(
-        Swatch("#597EA3", "Стальной"),
-        Swatch("#2C455D", "Ночной"),
-        Swatch("#94BCE3", "Небесный"),
-        Swatch("#3E8E8A", "Бирюзовый"),
-        Swatch("#4F7A5B", "Хвойный"),
-        Swatch("#7E8B4F", "Оливковый"),
-        Swatch("#B08A4F", "Песочный"),
-        Swatch("#A9762F", "Охра"),
-        Swatch("#9A5B4A", "Кирпичный"),
-        Swatch("#8A3B5B", "Вишнёвый"),
-        Swatch("#6B4E8A", "Сливовый"),
-        Swatch("#5D5D60", "Графитовый"),
+        Swatch("#597EA3", "color.steel"),
+        Swatch("#2C455D", "color.night"),
+        Swatch("#94BCE3", "color.sky"),
+        Swatch("#3E8E8A", "color.teal"),
+        Swatch("#4F7A5B", "color.pine"),
+        Swatch("#7E8B4F", "color.olive"),
+        Swatch("#B08A4F", "color.sand"),
+        Swatch("#A9762F", "color.ochre"),
+        Swatch("#9A5B4A", "color.brick"),
+        Swatch("#8A3B5B", "color.cherry"),
+        Swatch("#6B4E8A", "color.plum"),
+        Swatch("#5D5D60", "color.graphite"),
     )
 
     val HEXES = COLORS.map { it.hex }

@@ -19,6 +19,7 @@ import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.Goal
+import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.data.Settings
@@ -26,6 +27,7 @@ import app.kopeechka.finance.data.Tx
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.AiError
 import app.kopeechka.finance.net.DriveBackup
+import app.kopeechka.finance.net.DriveError
 import app.kopeechka.finance.net.RemoteBackup
 import app.kopeechka.finance.work.Schedules
 import com.google.android.gms.common.api.ApiException
@@ -43,7 +45,7 @@ import kotlin.math.roundToLong
 
 enum class Tab { HOME, OPS, BUDGET, REPORT, SETTINGS }
 enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES }
-enum class Kind(val label: String) { EXPENSE("Расход"), INCOME("Доход"), TRANSFER("Перевод") }
+enum class Kind(val key: String) { EXPENSE("kind.expense"), INCOME("kind.income"), TRANSFER("kind.transfer") }
 
 data class Draft(
     val editId: Long? = null,
@@ -65,7 +67,7 @@ sealed interface CurSheet {
 data class AccEdit(
     val id: String? = null,
     val name: String = "",
-    val type: String = "Карта",
+    val type: String = "",
     val mask: String = "",
     val cur: String = "RUB",
     val balance: String = "",
@@ -129,10 +131,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var pendingDrive: (suspend (String) -> Unit)? = null
 
     val calc: Calc get() = Calc(store.current)
+
+    /** Язык интерфейса: из настроек либо системный. */
+    val l: Lang get() = Lang.of(store.current.settings.lang)
     private val ctx get() = getApplication<Application>()
 
     init {
         val s = store.current.settings
+        DriveBackup.folderName = l.t("backup.folder")
         Schedules.syncReminder(ctx, s.remind, s.remindHour)
         Schedules.syncAutoBackup(ctx, s.autoBackup && s.driveLinked)
     }
@@ -148,6 +154,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             toast = null
         }
     }
+
+    private fun say(key: String, vararg args: Any?) = flash(l.t(key, *args))
 
     fun settings(f: (Settings) -> Settings) = store.update { it.copy(settings = f(it.settings)) }
 
@@ -187,7 +195,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun startClean() {
         store.replace(Demo.empty(store.current.settings.copy(onboarded = true)))
     }
+
     fun setDark(on: Boolean) = settings { it.copy(dark = on) }
+
+    /** Смена языка: интерфейс, названия валют, папка копий и канал уведомлений. */
+    fun setLang(code: String) {
+        settings { it.copy(lang = code) }
+        val nl = l
+        Currencies.setLang(nl)
+        DriveBackup.folderName = nl.t("backup.folder")
+        Schedules.ensureChannel(ctx, nl)
+        flash(nl.t("set.lang") + ": " + Lang.title(code))
+    }
 
     // ——— операции ———
 
@@ -207,7 +226,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openEdit(t: Tx) {
         if (t.cat == CAT_GOAL) {
-            confirm = Confirm("Взнос на цель", "Удалить «${t.title}»? Деньги вернутся на счёт, а прогресс цели уменьшится.", "Удалить") { deleteTx(t.id) }
+            confirm = Confirm(
+                l.t("msg.goalContribution"),
+                l.t("msg.deleteContribution", t.title),
+                l.t("common.delete"),
+            ) { deleteTx(t.id) }
             return
         }
         val d = store.current
@@ -252,18 +275,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveDraft() {
         val d = draft ?: return
         val v = d.amount.toLongOrNull()?.toDouble() ?: 0.0
-        if (v <= 0) return flash("Введите сумму")
+        if (v <= 0) return say("msg.enterAmount")
         val c = calc
-        val src = c.acc(d.from) ?: return flash("Сначала добавьте счёт")
+        val src = c.acc(d.from) ?: return say("msg.noAccount")
         val id = d.editId ?: store.current.nextId
         val tx = when (d.kind) {
             Kind.TRANSFER -> {
-                val dst = c.acc(d.to) ?: return flash("Выберите счёт зачисления")
-                if (src.id == dst.id) return flash("Выберите разные счета")
+                val dst = c.acc(d.to) ?: return say("msg.pickToAcc")
+                if (src.id == dst.id) return say("msg.sameAccounts")
                 val old = d.editId?.let { eid -> store.current.txs.firstOrNull { it.id == eid && it.acc == src.id }?.amount } ?: 0.0
-                if (c.balance(src) - old < v) return flash("На «${src.name}» недостаточно средств")
+                if (c.balance(src) - old < v) return say("msg.notEnough", src.name)
                 val got = c.conv(v, src.cur, dst.cur)
-                Tx(id, d.date, "Перевод: ${src.name} → ${dst.name}", CAT_TRANSFER, src.id, -v, d.note, dst.id, got)
+                Tx(id, d.date, l.t("msg.transferTitle", src.name, dst.name), CAT_TRANSFER, src.id, -v, d.note, dst.id, got)
             }
             Kind.INCOME -> Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.incomeCat).name }, d.incomeCat, src.id, v)
             Kind.EXPENSE -> Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.cat).name }, d.cat, src.id, -v)
@@ -273,17 +296,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else s.copy(txs = listOf(tx) + s.txs, nextId = s.nextId + 1)
         }
         draft = null
-        flash(
-            when (d.kind) {
-                Kind.TRANSFER -> "Перевод ${c.fmt(v, src.cur)} → ${c.fmt(tx.toAmount ?: 0.0, c.accCur(tx.toAcc))}"
-                Kind.INCOME -> "Доход ${c.fmt(v, src.cur)} · ${c.cat(tx.cat).name}"
-                Kind.EXPENSE -> (if (d.editId != null) "Изменено: " else "Расход ") + "${c.fmt(v, src.cur)} · ${c.cat(tx.cat).name}"
-            },
-        )
+        when (d.kind) {
+            Kind.TRANSFER -> say("msg.transferDone", c.fmt(v, src.cur), c.fmt(tx.toAmount ?: 0.0, c.accCur(tx.toAcc)))
+            Kind.INCOME -> say("msg.incomeDone", c.fmt(v, src.cur), c.cat(tx.cat).name)
+            Kind.EXPENSE -> if (d.editId != null) say("msg.changed", c.fmt(v, src.cur), c.cat(tx.cat).name)
+            else say("msg.expenseDone", c.fmt(v, src.cur), c.cat(tx.cat).name)
+        }
     }
 
     fun askDeleteTx(id: Long) {
-        confirm = Confirm("Удалить операцию", "Операция исчезнет из истории, балансы пересчитаются.", "Удалить") { deleteTx(id) }
+        confirm = Confirm(l.t("msg.deleteTx"), l.t("msg.deleteTxText"), l.t("common.delete")) { deleteTx(id) }
     }
 
     private fun deleteTx(id: Long) {
@@ -299,7 +321,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             s.copy(txs = s.txs.filterNot { it.id == id }, goals = goals)
         }
         draft = null
-        flash("Операция удалена")
+        say("msg.txDeleted")
     }
 
     // ——— валюты ———
@@ -307,7 +329,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setMainCur(code: String) {
         settings { it.copy(mainCur = code) }
         curSheet = null
-        flash("Основная валюта — ${Currencies.info(code).name}")
+        say("msg.mainCurSet", Currencies.info(code).name)
     }
 
     fun setAccCur(accId: String, code: String) {
@@ -331,7 +353,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (e.id != accId) e
             else e.copy(cur = code, balance = calc.acc(accId)?.let { calc.balance(it).roundToLong().toString() } ?: e.balance)
         }
-        flash("«${a.name}» теперь в ${Currencies.info(code).inName}")
+        say("msg.accCurSet", a.name, Currencies.info(code).inName)
     }
 
     fun setRate(code: String, text: String) {
@@ -352,17 +374,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         currencyPicker = false
         currencyQuery = ""
-        flash("Добавлены ${Currencies.info(c).name} — проверьте курс")
+        say("msg.curAdded", Currencies.info(c).name)
     }
 
     /** Добавить валюту, которой нет в каталоге. */
     fun saveCustomCurrency() {
         val dft = currencyDraft ?: return
         val code = dft.code.trim().uppercase()
-        if (code.length !in 2..6) return flash("Код валюты — от 2 до 6 символов")
-        if (calc.currencies.contains(code)) return flash("Такая валюта уже добавлена")
+        if (code.length !in 2..6) return say("msg.curCodeLen")
+        if (calc.currencies.contains(code)) return say("msg.curExists")
         val rate = dft.rate.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
-        if (rate <= 0) return flash("Укажите курс в рублях")
+        if (rate <= 0) return say("msg.curRate")
         val name = dft.name.trim().ifBlank { code }
         val def = CurrencyDef(code, dft.sym.trim().ifBlank { code }, name, name)
         settings { s ->
@@ -374,22 +396,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         currencyDraft = null
         currencyPicker = false
-        flash("Валюта $code добавлена")
+        say("msg.curAddedCode", code)
     }
 
     fun removeCurrency(code: String) {
-        if (code == Currencies.BASE) return flash("Рубль — база курсов, его убрать нельзя")
+        if (code == Currencies.BASE) return say("msg.curBase")
         val d = store.current
-        if (d.settings.mainCur == code) return flash("Это основная валюта приложения")
-        if (d.accounts.any { it.cur == code }) return flash("Валюта используется на счёте")
-        if (d.goals.any { it.cur == code }) return flash("Валюта используется в цели")
+        if (d.settings.mainCur == code) return say("msg.curIsMain")
+        if (d.accounts.any { it.cur == code }) return say("msg.curUsedAcc")
+        if (d.goals.any { it.cur == code }) return say("msg.curUsedGoal")
         settings { s ->
             s.copy(
                 currencyCodes = s.currencyCodes.filterNot { it == code },
                 customCurrencies = s.customCurrencies.filterNot { it.code == code },
             )
         }
-        flash("Валюта $code убрана")
+        say("msg.curRemoved", code)
     }
 
     // ——— периоды отчётов ———
@@ -416,14 +438,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ——— счета ———
 
     fun openAccEdit(a: Account?) {
-        accEdit = if (a == null) AccEdit(cur = store.current.settings.mainCur)
+        accEdit = if (a == null) AccEdit(cur = store.current.settings.mainCur, type = l.t("acc.type.card"))
         else AccEdit(a.id, a.name, a.type, a.mask, a.cur, calc.balance(a).roundToLong().toString(), a.inTotal)
     }
 
     fun saveAcc() {
         val e = accEdit ?: return
         val name = e.name.trim()
-        if (name.isEmpty()) return flash("Введите название счёта")
+        if (name.isEmpty()) return say("msg.enterAccName")
         val bal = e.balance.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
         store.update { s ->
             if (e.id == null) {
@@ -436,7 +458,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         accEdit = null
-        flash(if (e.id == null) "Счёт «$name» добавлен" else "Счёт сохранён")
+        if (e.id == null) say("msg.accAdded", name) else say("msg.accSaved")
     }
 
     fun toggleInTotal(id: String) = store.update { s -> s.copy(accounts = s.accounts.map { if (it.id == id) it.copy(inTotal = !it.inTotal) else it }) }
@@ -444,16 +466,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun askDeleteAcc(id: String) {
         val d = store.current
         val a = d.accounts.firstOrNull { it.id == id } ?: return
-        if (d.accounts.size <= 1) return flash("Нужен хотя бы один счёт")
+        if (d.accounts.size <= 1) return say("msg.needOneAccount")
         val n = d.txs.count { it.acc == id || it.toAcc == id }
         confirm = Confirm(
-            "Удалить счёт",
-            if (n > 0) "Вместе со счётом «${a.name}» удалятся $n операций по нему." else "Удалить счёт «${a.name}»?",
-            "Удалить",
+            l.t("msg.deleteAccTitle"),
+            if (n > 0) l.t("msg.deleteAccWithTx", a.name, l.n(n, "op")) else l.t("msg.deleteAccPlain", a.name),
+            l.t("common.delete"),
         ) {
             store.update { s -> s.copy(accounts = s.accounts.filterNot { it.id == id }, txs = s.txs.filterNot { it.acc == id || it.toAcc == id }) }
             accEdit = null
-            flash("Счёт удалён")
+            say("msg.accDeleted")
         }
     }
 
@@ -468,10 +490,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveCat() {
         val e = catEdit ?: return
         val name = e.name.trim()
-        if (name.isEmpty()) return flash("Введите название категории")
+        if (name.isEmpty()) return say("msg.enterCatName")
         val code = e.code.trim().ifBlank { name.filter { it.isLetter() }.take(2) }.uppercase().take(2).ifBlank { "??" }
         val c = calc
-        val limitRub = c.conv(e.limit.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0, c.main, "RUB")
+        val limitRub = c.conv(e.limit.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0, c.main, Currencies.BASE)
         store.update { s ->
             if (e.id == null) {
                 s.copy(
@@ -487,7 +509,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         catEdit = null
-        flash(if (e.id == null) "Категория «$name» создана" else "Категория сохранена")
+        if (e.id == null) say("msg.catCreated", name) else say("msg.catSaved")
     }
 
     fun askDeleteCat(id: String) {
@@ -495,16 +517,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val cat = d.categories.firstOrNull { it.id == id } ?: return
         val sameKind = d.categories.filter { it.income == cat.income && it.id != id }
         val target = sameKind.firstOrNull { it.id == "other" } ?: sameKind.firstOrNull()
-            ?: return flash("Это последняя категория ${if (cat.income) "доходов" else "расходов"}")
+            ?: return say(if (cat.income) "msg.lastCatIncome" else "msg.lastCatExpense")
         val n = d.txs.count { it.cat == id }
         confirm = Confirm(
-            "Удалить категорию",
-            if (n > 0) "$n операций из «${cat.name}» перейдут в «${target.name}»." else "Удалить «${cat.name}»?",
-            "Удалить",
+            l.t("msg.deleteCatTitle"),
+            if (n > 0) l.t("msg.deleteCatMove", l.n(n, "op"), cat.name, target.name) else l.t("msg.deleteCatPlain", cat.name),
+            l.t("common.delete"),
         ) {
             store.update { s -> s.copy(categories = s.categories.filterNot { it.id == id }, txs = s.txs.map { if (it.cat == id) it.copy(cat = target.id) else it }) }
             catEdit = null
-            flash("Категория удалена")
+            say("msg.catDeleted")
         }
     }
 
@@ -519,27 +541,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val e = goalEdit ?: return
         val name = e.name.trim()
         val target = e.target.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
-        if (name.isEmpty() || target <= 0) return flash("Укажите название и сумму цели")
+        if (name.isEmpty() || target <= 0) return say("msg.enterGoal")
         store.update { s ->
             if (e.id == null) s.copy(goals = s.goals + Goal("g${s.nextId}", name, target, 0.0, e.cur, e.hint.trim()), nextId = s.nextId + 1)
             else s.copy(goals = s.goals.map { if (it.id == e.id) it.copy(name = name, target = target, hint = e.hint.trim()) else it })
         }
         goalEdit = null
-        flash(if (e.id == null) "Цель «$name» создана" else "Цель сохранена")
+        if (e.id == null) say("msg.goalCreated", name) else say("msg.goalSaved")
     }
 
     fun askDeleteGoal(id: String) {
         val g = store.current.goals.firstOrNull { it.id == id } ?: return
-        confirm = Confirm("Удалить цель", "Цель «${g.name}» исчезнет. Операции взносов останутся в истории.", "Удалить") {
+        confirm = Confirm(l.t("msg.deleteGoalTitle"), l.t("msg.deleteGoalText", g.name), l.t("common.delete")) {
             store.update { s -> s.copy(goals = s.goals.filterNot { it.id == id }) }
             goalEdit = null
-            flash("Цель удалена")
+            say("msg.goalDeleted")
         }
     }
 
     fun goalPresets(cur: String): List<Double> = when (cur) {
-        "USD", "EUR" -> listOf(10.0, 50.0, 100.0, 250.0)
-        "KZT" -> listOf(5000.0, 10000.0, 25000.0, 50000.0)
+        "USD", "EUR", "GBP" -> listOf(10.0, 50.0, 100.0, 250.0)
+        "KZT", "UZS", "IDR", "VND" -> listOf(5000.0, 10000.0, 25000.0, 50000.0)
+        "TMT" -> listOf(50.0, 100.0, 250.0, 500.0)
         else -> listOf(1000.0, 5000.0, 10000.0, 25000.0)
     }
 
@@ -555,16 +578,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val g = store.current.goals.firstOrNull { it.id == gs.goalId } ?: return
         val a = c.acc(gs.from) ?: return
         val debit = c.conv(gs.amount, g.cur, a.cur)
-        if (c.balance(a) < debit) return flash("На «${a.name}» не хватает средств")
+        if (c.balance(a) < debit) return say("msg.notEnoughGoal", a.name)
         store.update { s ->
             s.copy(
-                txs = listOf(Tx(s.nextId, c.todayDay, "На цель: ${g.name}", CAT_GOAL, a.id, -debit, goal = g.id)) + s.txs,
+                txs = listOf(Tx(s.nextId, c.todayDay, l.t("msg.goalTitle", g.name), CAT_GOAL, a.id, -debit, goal = g.id)) + s.txs,
                 nextId = s.nextId + 1,
                 goals = s.goals.map { if (it.id == g.id) it.copy(saved = it.saved + gs.amount) else it },
             )
         }
         goalSheet = null
-        flash("Отложено ${c.fmt(gs.amount, g.cur)} на «${g.name}»")
+        say("msg.goalDone", c.fmt(gs.amount, g.cur), g.name)
     }
 
     // ——— настройки и данные ———
@@ -572,7 +595,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setRemind(on: Boolean) {
         settings { it.copy(remind = on) }
         Schedules.syncReminder(ctx, on, store.current.settings.remindHour)
-        if (on) flash("Напомню в ${store.current.settings.remindHour}:00")
+        if (on) say("msg.remindSet", store.current.settings.remindHour)
     }
 
     fun setRemindHour(h: Int) {
@@ -586,16 +609,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun askLoadDemo() {
-        confirm = Confirm("Демо-данные", "Текущие операции, счета и цели заменятся примерами. Сначала можно сделать резервную копию.", "Заменить") {
-            store.replace(Demo.create().copy(settings = store.current.settings.copy(onboarded = true)))
-            flash("Загружены демо-данные")
+        confirm = Confirm(l.t("msg.demoTitle"), l.t("msg.demoText"), l.t("msg.demoReplace")) {
+            val demo = Demo.create(l)
+            store.replace(demo.copy(settings = store.current.settings.copy(onboarded = true, mainCur = demo.settings.mainCur)))
+            say("msg.demoLoaded")
         }
     }
 
     fun askClearAll() {
-        confirm = Confirm("Очистить данные", "Удалятся все операции, счета, цели и свои категории. Настройки останутся.", "Очистить") {
+        confirm = Confirm(l.t("msg.clearTitle"), l.t("msg.clearText"), l.t("msg.clearAction")) {
             store.replace(Demo.empty(store.current.settings))
-            flash("Данные очищены")
+            say("msg.cleared")
         }
     }
 
@@ -608,7 +632,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         apiKeyInput = secure.get(keyName(store.current.settings.aiProvider))
         if (withReport) {
             settings { it.copy(aiSets = it.aiSets + "report") }
-            if (question.isBlank()) question = "Объясни этот отчёт и скажи, где я перетрачиваю."
+            if (question.isBlank()) question = l.t("ai.reportQuestion")
         }
     }
 
@@ -636,29 +660,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val c = Calc(d)
         val s = d.settings
         val parts = mutableListOf<String>()
+        val r = c.range(period, periodOffset)
         if ("accounts" in s.aiSets) {
-            parts += "СЧЕТА (основная валюта ${c.main}):\n" + d.accounts.joinToString("\n") { a ->
+            parts += l.t("ai.payload.accounts", c.main) + "\n" + d.accounts.joinToString("\n") { a ->
                 val b = c.balances[a.id] ?: 0.0
                 "- ${a.name}: ${c.fmt(b, a.cur)}" + (if (a.cur == c.main) "" else " ≈ ${c.fmtMain(c.toMain(b, a.cur))}")
             }
         }
-        val r = c.range(period, periodOffset)
         if ("ops" in s.aiSets) {
             val within = d.txs.filter { it.date in r.from..r.to }.sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.id })
-            parts += "ОПЕРАЦИИ ${r.note} (${r.title}), всего ${within.size}:\n" + within.take(80).joinToString("\n") { t ->
+            parts += l.t("ai.payload.ops", r.note, r.title, within.size) + "\n" + within.take(80).joinToString("\n") { t ->
                 "- ${c.dayLabel(t.date)} · ${t.title} · ${c.cat(t.cat).name} · ${Currencies.fmtSigned(t.amount, c.accCur(t.acc))}"
             }
         }
         if ("budgets" in s.aiSets) {
-            parts += "БЮДЖЕТЫ месяца (до конца месяца ${c.daysLeft} дн.):\n" + c.budgets.joinToString("\n") { "- ${it.cat.name}: ${c.fmtMain(it.spent)} из ${c.fmtMain(it.limit)}" }
+            parts += l.t("ai.payload.budgets", l.n(c.daysLeft, "day")) + "\n" +
+                c.budgets.joinToString("\n") { "- ${it.cat.name}: ${c.fmtMain(it.spent)} / ${c.fmtMain(it.limit)}" }
         }
         if ("goals" in s.aiSets && d.goals.isNotEmpty()) {
-            parts += "ЦЕЛИ:\n" + d.goals.joinToString("\n") { "- ${it.name}: ${c.fmt(it.saved, it.cur)} из ${c.fmt(it.target, it.cur)}" }
+            parts += l.t("ai.payload.goals") + "\n" + d.goals.joinToString("\n") { "- ${it.name}: ${c.fmt(it.saved, it.cur)} / ${c.fmt(it.target, it.cur)}" }
         }
         if ("report" in s.aiSets) {
-            parts += "ОТЧЁТ (${r.title}, ${cut.title.lowercase()}):\n" + c.breakdown(r, cut).joinToString("\n") { "- ${it.name}: ${c.fmtMain(it.value)} (${it.pct})" }
+            parts += l.t("ai.payload.report", r.title, l.t(cut.titleKey).lowercase()) + "\n" +
+                c.breakdown(r, cut).joinToString("\n") { "- ${it.name}: ${c.fmtMain(it.value)} (${it.pct})" }
             c.compare(period, periodOffset)?.let { (prev, delta) ->
-                parts += "СРАВНЕНИЕ: за тот же отрезок прошлого периода ${c.fmtMain(prev)}, изменение ${delta.roundToInt()}%."
+                parts += l.t("ai.payload.compare", c.fmtMain(prev), delta.roundToInt())
             }
         }
         return parts.joinToString("\n\n")
@@ -671,23 +697,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val total = sp.sumOf { it.value }
         val top = sp.getOrNull(0)
         val second = sp.getOrNull(1)
-        val lines = mutableListOf("Разбор ${r.note} (${r.title}), всего расходов ${c.fmtMain(total)}.")
+        val lines = mutableListOf(l.t("advice.intro", r.note, r.title, c.fmtMain(total)))
         if (top != null && total > 0) {
-            lines += "1. Основная статья — «${c.cat(top.key).name}»: ${c.fmtMain(top.value)}, это ${(top.value / total * 100).roundToInt()}% всех трат." +
-                (second?.let { " Вторая — «${c.cat(it.key).name}» (${c.fmtMain(it.value)})." } ?: "")
+            lines += l.t("advice.top", c.cat(top.key).name, c.fmtMain(top.value), (top.value / total * 100).roundToInt()) +
+                (second?.let { l.t("advice.second", c.cat(it.key).name, c.fmtMain(it.value)) } ?: "")
         }
         val over = c.budgets.filter { it.over }
-        lines += "2. " + if (over.isNotEmpty()) {
-            "Превышены лимиты: " + over.joinToString { "${it.cat.name} (+${c.fmtMain(it.spent - it.limit)})" } + ". Верните их в рамки в первую очередь."
+        lines += if (over.isNotEmpty()) {
+            l.t("advice.over", over.joinToString { "${it.cat.name} (+${c.fmtMain(it.spent - it.limit)})" })
         } else {
-            "Лимиты месяца соблюдены — можно поднять цель по накоплениям."
+            l.t("advice.ok")
         }
-        lines += "3. Если срезать «${top?.let { c.cat(it.key).name } ?: "крупную статью"}» на 15%, освободится примерно ${c.fmtMain((top?.value ?: 0.0) * 0.15)}. Это разумный первый шаг."
-        lines += "4. " + if (c.d.accounts.map { it.cur }.distinct().size > 1) {
-            "Мультивалютность: держите подушку в той валюте, в которой тратите, чтобы не терять на конвертации."
-        } else {
-            "Откладывайте фиксированную сумму сразу после зарплаты — так цели растут без усилий."
-        }
+        lines += l.t("advice.cut", top?.let { c.cat(it.key).name } ?: l.t("advice.bigItem"), c.fmtMain((top?.value ?: 0.0) * 0.15))
+        lines += if (c.d.accounts.map { it.cur }.distinct().size > 1) l.t("advice.multiCur") else l.t("advice.save")
         return lines.joinToString("\n")
     }
 
@@ -703,35 +725,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun ask() {
         if (asking) return
-        if (question.isBlank()) return flash("Напишите вопрос агенту")
+        if (question.isBlank()) return say("msg.askQuestion")
         val s = store.current.settings
-        if (s.aiSets.isEmpty()) return flash("Выберите данные для отправки")
+        if (s.aiSets.isEmpty()) return say("msg.pickData")
+        val lang = l
         val payload = buildPayload()
-        val prompt = "Ты финансовый советник. Данные пользователя:\n\n$payload\n\nВопрос: $question\n\n" +
-            "Ответь по-русски, коротко, 3-5 пунктов с конкретными суммами. Только простой текст: без Markdown, без заголовков, " +
-            "без звёздочек и решёток. Пункты нумеруй как «1.», «2.»."
+        val prompt = lang.t("ai.systemPrompt", payload, question)
         val p = Ai.provider(s.aiProvider)
         val model = modelFor(s)
         val key = secure.get(keyName(p.key))
         asking = true
         answer = ""
-        answerMeta = "≈ ${prompt.length / 3} токенов"
+        answerMeta = "≈ ${prompt.length / 3} tokens"
         viewModelScope.launch {
             try {
                 if (p.needsKey && key.isBlank()) {
                     delay(500)
                     answer = localAdvice()
-                    answerFrom = "офлайн-разбор"
+                    answerFrom = lang.t("ai.offline")
                 } else {
                     answer = stripMd(Ai.ask(p.key, model, key, s.customEndpoint, prompt))
-                    answerFrom = "${p.name} · $model"
+                    answerFrom = "${p.name(lang)} · $model"
                 }
             } catch (e: AiError) {
-                answer = (e.message ?: "Ошибка") + "\n\nПока — офлайн-разбор:\n" + localAdvice()
-                answerFrom = "ошибка запроса"
+                answer = e.text(lang) + lang.t("ai.offlineAfterError") + localAdvice()
+                answerFrom = lang.t("ai.errorFrom")
             } catch (e: Exception) {
-                answer = "Не удалось получить ответ: ${e.message}\n\nПока — офлайн-разбор:\n" + localAdvice()
-                answerFrom = "ошибка запроса"
+                answer = (e.message ?: "") + lang.t("ai.offlineAfterError") + localAdvice()
+                answerFrom = lang.t("ai.errorFrom")
             } finally {
                 asking = false
             }
@@ -752,14 +773,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     authRequests.emit(r.pendingIntent!!.intentSender)
                     return@launch
                 }
-                if (token == null) throw IllegalStateException("Google не выдал токен")
+                if (token == null) throw IllegalStateException(l.t("msg.noToken"))
                 runDrive(token, action)
             } catch (e: ApiException) {
                 driveBusy = false
-                flash("Google: ошибка авторизации (${e.statusCode}). Проверьте OAuth-клиент в Google Cloud.")
+                say("msg.driveAuthError", e.statusCode)
+            } catch (e: DriveError) {
+                driveBusy = false
+                say("msg.driveError", e.text(l))
             } catch (e: Exception) {
                 driveBusy = false
-                flash("Google Диск: ${e.message}")
+                say("msg.driveError", e.message ?: "")
             }
         }
     }
@@ -773,7 +797,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (action != null && token != null) runDrive(token, action) else driveBusy = false
             } catch (e: ApiException) {
                 driveBusy = false
-                flash("Доступ к Google Диску не выдан")
+                say("msg.driveDenied")
             }
         }
     }
@@ -781,7 +805,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun onAuthCancelled() {
         pendingDrive = null
         driveBusy = false
-        flash("Подключение Google Диска отменено")
+        say("msg.driveCancelled")
     }
 
     private suspend fun runDrive(token: String, action: suspend (String) -> Unit) {
@@ -791,8 +815,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 settings { it.copy(driveLinked = true) }
                 Schedules.syncAutoBackup(ctx, store.current.settings.autoBackup)
             }
+        } catch (e: DriveError) {
+            say("msg.driveError", e.text(l))
         } catch (e: Exception) {
-            flash("Google Диск: ${e.message}")
+            say("msg.driveError", e.message ?: "")
         } finally {
             driveBusy = false
         }
@@ -803,23 +829,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         DriveBackup.prune(t, 10)
         settings { it.copy(lastBackupAt = System.currentTimeMillis()) }
         driveList = DriveBackup.list(t)
-        flash("Копия сохранена: $name")
+        say("msg.backupSaved", name)
     }
 
     fun refreshBackups() = driveAction { t -> driveList = DriveBackup.list(t) }
 
     fun askRestore(b: RemoteBackup) {
         confirm = Confirm(
-            "Восстановить копию",
-            "Все текущие данные заменятся копией от ${DriveBackup.formatTime(b.created)}. Текущее состояние сохранится на телефоне в before-restore.json.",
-            "Восстановить",
+            l.t("msg.restoreTitle"),
+            l.t("msg.restoreText", DriveBackup.formatTime(b.created, l)),
+            l.t("common.restore"),
         ) {
             driveAction { t ->
                 val restored = store.parseBackup(DriveBackup.download(t, b.id))
                 File(ctx.filesDir, "before-restore.json").writeText(store.exportJson())
                 val keep = store.current.settings
-                store.replace(restored.copy(settings = restored.settings.copy(onboarded = true, driveLinked = true, autoBackup = keep.autoBackup, lastBackupAt = keep.lastBackupAt)))
-                flash("Данные восстановлены из копии")
+                store.replace(
+                    restored.copy(
+                        settings = restored.settings.copy(
+                            onboarded = true,
+                            driveLinked = true,
+                            autoBackup = keep.autoBackup,
+                            lastBackupAt = keep.lastBackupAt,
+                        ),
+                    ),
+                )
+                say("msg.restored")
             }
         }
     }
@@ -828,6 +863,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settings { it.copy(driveLinked = false, autoBackup = false) }
         Schedules.syncAutoBackup(ctx, false)
         driveList = emptyList()
-        flash("Google Диск отключён в приложении")
+        say("msg.driveUnlinked")
     }
 }

@@ -26,6 +26,7 @@ class Store(context: Context) {
     fun update(f: (AppData) -> AppData) {
         synchronized(lock) {
             val next = f(_data.value)
+            Currencies.setLang(Lang.of(next.settings.lang))
             Currencies.registerCustom(next.settings.customCurrencies)
             _data.value = next
             persist(next)
@@ -48,11 +49,12 @@ class Store(context: Context) {
         if (f.exists()) {
             runCatching {
                 val d = json.decodeFromString(AppData.serializer(), String(file.readFully(), Charsets.UTF_8))
+                Currencies.setLang(Lang.of(d.settings.lang))
                 Currencies.registerCustom(d.settings.customCurrencies)
                 return d
             }
         }
-        return Demo.create().also { persist(it) }
+        return Demo.create(Lang.fromSystem()).also { persist(it) }
     }
 
     private fun persist(d: AppData) {

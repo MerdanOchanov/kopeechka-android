@@ -1,16 +1,20 @@
 package app.kopeechka.finance.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,151 +32,182 @@ import app.kopeechka.finance.AppViewModel
 import app.kopeechka.finance.CatEdit
 import app.kopeechka.finance.Confirm
 import app.kopeechka.finance.CurSheet
+import app.kopeechka.finance.CurrencyDraft
 import app.kopeechka.finance.Draft
 import app.kopeechka.finance.GoalEdit
 import app.kopeechka.finance.GoalSheet
 import app.kopeechka.finance.Kind
 import app.kopeechka.finance.data.AppData
 import app.kopeechka.finance.data.Calc
-import app.kopeechka.finance.CurrencyDraft
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.ui.theme.T
 
 private val DATASETS = listOf(
-    "ops" to "Операции",
-    "budgets" to "Бюджеты",
-    "accounts" to "Счета и валюты",
-    "goals" to "Цели",
-    "report" to "Текущий отчёт",
+    "ops" to "ai.set.ops",
+    "budgets" to "ai.set.budgets",
+    "accounts" to "ai.set.accounts",
+    "goals" to "ai.set.goals",
+    "report" to "ai.set.report",
 )
 
-private val PROMPTS = listOf(
-    "Где я перетрачиваю?",
-    "Как накопить 300 000 за полгода?",
-    "Стоит ли держать накопления в валюте?",
-)
+private val PROMPTS = listOf("ai.prompt.1", "ai.prompt.2", "ai.prompt.3")
 
-// ——— Новая операция / редактирование ———
+/** Подпись + горизонтальная лента: не растёт вниз, сколько бы счетов или категорий ни было. */
+@Composable
+private fun Lane(label: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Kicker(label)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) { content() }
+    }
+}
+
+// ——— Новая операция: помещается в экран целиком ———
 
 @Composable
 fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
     val col = T.c
+    val l = T.l
     val src = c.acc(d.from)
     val dst = c.acc(d.to)
     val srcCur = src?.cur ?: c.main
     val v = d.amount.toLongOrNull()?.toDouble() ?: 0.0
     val isT = d.kind == Kind.TRANSFER
-    OverlayScreen(
-        title = when {
-            isT -> "Перевод между счетами"
-            d.editId != null -> "Операция"
-            else -> "Новая операция"
-        },
-        action = "Отмена",
-        onAction = { vm.draft = null },
-        footer = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (d.editId != null) DangerButton("Удалить", { vm.askDeleteTx(d.editId) }, Modifier.weight(0.45f))
-                PrimaryButton(if (isT) "Перевести" else "Сохранить", { vm.saveDraft() }, Modifier.weight(1f), enabled = d.amount.isNotEmpty())
-            }
-        },
-    ) {
-        JoinedSegments(Kind.entries.map { it.label }, d.kind.ordinal) { vm.draft = d.copy(kind = Kind.entries[it]) }
 
-        Column {
+    Column(Modifier.fillMaxSize().background(col.bg)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                when {
+                    isT -> l.t("add.transfer")
+                    d.editId != null -> l.t("add.one")
+                    else -> l.t("add.new")
+                }.uppercase(),
+                style = T.h(15.sp, col.text, 0.12.em),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            GhostButton(l.t("common.cancel"), { vm.draft = null }, size = 13)
+        }
+        Divider()
+
+        Column(
+            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            JoinedSegments(Kind.entries.map { l.t(it.key) }, d.kind.ordinal) { vm.draft = d.copy(kind = Kind.entries[it]) }
+
             Row(
                 Modifier
                     .fillMaxWidth()
                     .background(col.n100)
                     .hairline(col.divider)
-                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 Text(
                     when (d.kind) {
-                        Kind.TRANSFER -> "перевод"
-                        Kind.INCOME -> "доход"
-                        Kind.EXPENSE -> "расход"
+                        Kind.TRANSFER -> l.t("add.transferLower")
+                        Kind.INCOME -> l.t("add.incomeLower")
+                        Kind.EXPENSE -> l.t("add.expenseLower")
                     },
-                    style = T.b(13.sp, col.n600),
-                    modifier = Modifier.padding(bottom = 6.dp),
+                    style = T.b(12.sp, col.n600),
+                    modifier = Modifier.weight(1f).padding(bottom = 5.dp),
+                    maxLines = 1,
                 )
+                if (v > 0 && srcCur != c.main) {
+                    Text(
+                        l.t("add.approxMain", c.fmtMain(c.toMain(v, srcCur))),
+                        style = T.b(10.5.sp, col.n600),
+                        modifier = Modifier.padding(bottom = 6.dp),
+                        maxLines = 1,
+                    )
+                }
                 Text(
                     if (d.amount.isEmpty()) "0" else Currencies.fmtNumber(v),
-                    style = T.h(40.sp, if (d.amount.isEmpty()) col.n400 else col.text, lineHeight = 42.sp),
+                    style = T.h(34.sp, if (d.amount.isEmpty()) col.n400 else col.text, lineHeight = 36.sp),
+                    maxLines = 1,
                 )
-                Text(Currencies.sym(srcCur), style = T.b(18.sp, col.n700), modifier = Modifier.padding(bottom = 5.dp))
+                Text(Currencies.sym(srcCur), style = T.b(16.sp, col.n700), modifier = Modifier.padding(bottom = 4.dp))
             }
-            if (v > 0 && srcCur != c.main) {
-                Text(
-                    "≈ ${c.fmtMain(c.toMain(v, srcCur))} в основной валюте",
-                    style = T.b(11.5.sp, col.n700),
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                )
-            }
-        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker(if (isT) "Откуда" else "Счёт")
-            ChipFlow {
-                c.d.accounts.forEach { a -> Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == d.from, { vm.draft = d.copy(from = a.id) }) }
-            }
-        }
-
-        if (isT) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kicker("Куда")
-                ChipFlow {
-                    c.d.accounts.forEach { a -> Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == d.to, { vm.draft = d.copy(to = a.id) }) }
+            Lane(if (isT) l.t("add.fromAcc") else l.t("add.account")) {
+                c.d.accounts.forEach { a ->
+                    Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == d.from, { vm.draft = d.copy(from = a.id) })
                 }
-                Blueprint(Modifier.fillMaxWidth(), PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Зачислится", style = T.b(12.sp, col.n700))
-                        Spacer(Modifier.weight(1f))
-                        Text(if (dst != null) c.fmt(c.conv(v, srcCur, dst.cur), dst.cur) else "—", style = T.h(17.sp, col.text))
+            }
+
+            if (isT) {
+                Lane(l.t("add.toAcc")) {
+                    c.d.accounts.forEach { a ->
+                        Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == d.to, { vm.draft = d.copy(to = a.id) })
                     }
                 }
+                Row(
+                    Modifier.fillMaxWidth().hairline(col.divider).padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(l.t("add.willGet"), style = T.b(12.sp, col.n700))
+                    Spacer(Modifier.weight(1f))
+                    Text(if (dst != null) c.fmt(c.conv(v, srcCur, dst.cur), dst.cur) else l.t("common.dash"), style = T.h(16.sp, col.text))
+                }
             }
-        }
 
-        if (d.kind == Kind.EXPENSE) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kicker("Категория")
-                ChipFlow {
+            if (d.kind == Kind.EXPENSE) {
+                Lane(l.t("add.category")) {
                     c.d.categories.filter { !it.income }.forEach { cat ->
                         Chip(cat.name, cat.id == d.cat, { vm.draft = d.copy(cat = cat.id) }, code = cat.code, accent = catColor(c, cat.id))
                     }
                 }
             }
-        }
-        if (d.kind == Kind.INCOME) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kicker("Категория дохода")
-                ChipFlow {
+            if (d.kind == Kind.INCOME) {
+                Lane(l.t("add.incomeCategory")) {
                     c.d.categories.filter { it.income }.forEach { cat ->
                         Chip(cat.name, cat.id == d.incomeCat, { vm.draft = d.copy(incomeCat = cat.id) }, code = cat.code, accent = catColor(c, cat.id))
                     }
                 }
             }
-        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker("Дата")
-            ChipFlow {
-                (0..2).forEach { back ->
+            Lane(l.t("add.date")) {
+                (0..6).forEach { back ->
                     val day = c.todayDay - back
                     Chip(c.dayLabel(day), d.date == day, { vm.draft = d.copy(date = day) })
                 }
-                if (d.date < c.todayDay - 2) Chip(c.dayLabel(d.date), true, {})
+                if (d.date < c.todayDay - 6) Chip(c.dayLabel(d.date), true, {})
             }
+
+            Field(
+                null,
+                d.note,
+                { vm.draft = d.copy(note = it) },
+                placeholder = if (isT) l.t("add.noteTransferHint") else l.t("add.noteHint"),
+            )
+
+            Keypad(Modifier.weight(1f), fill = true) { vm.press(it) }
         }
 
-        Field(null, d.note, { vm.draft = d.copy(note = it) }, placeholder = if (isT) "Комментарий к переводу" else "Название или комментарий (необязательно)")
-        Keypad { vm.press(it) }
+        Divider()
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (d.editId != null) DangerButton(l.t("common.delete"), { vm.askDeleteTx(d.editId) }, Modifier.weight(0.45f))
+            PrimaryButton(
+                if (isT) l.t("add.saveTransfer") else l.t("common.save"),
+                { vm.saveDraft() },
+                Modifier.weight(1f),
+                enabled = d.amount.isNotEmpty(),
+            )
+        }
     }
 }
 
@@ -181,12 +216,14 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
 @Composable
 fun AdvisorOverlay(vm: AppViewModel, data: AppData) {
     val col = T.c
+    val l = T.l
     val s = data.settings
     val p = Ai.provider(s.aiProvider)
-    val payload = remember(data, vm.period, vm.cut) { vm.buildPayload() }
-    OverlayScreen("ИИ-советник", "Закрыть", { vm.advisorOpen = false }) {
+    val payload = remember(data, vm.period, vm.cut, vm.periodOffset) { vm.buildPayload() }
+    val range = remember(data, vm.period, vm.periodOffset) { Calc(data, l = l).range(vm.period, vm.periodOffset) }
+    OverlayScreen(l.t("ai.title"), l.t("common.close"), { vm.advisorOpen = false }) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker("Агент")
+            Kicker(l.t("ai.agent"))
             Ai.PROVIDERS.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     row.forEach { pr ->
@@ -199,9 +236,9 @@ fun AdvisorOverlay(vm: AppViewModel, data: AppData) {
                                 .tap { vm.setProvider(pr.key) }
                                 .padding(horizontal = 10.dp, vertical = 9.dp),
                         ) {
-                            Text(pr.name, style = T.b(12.5.sp, st.fg))
+                            Text(pr.name(l), style = T.b(12.5.sp, st.fg))
                             Text(
-                                "${pr.vendor} · ${s.aiModels[pr.key]?.takeIf { it.isNotBlank() } ?: pr.defaultModel}",
+                                "${pr.vendor(l)} · ${s.aiModels[pr.key]?.takeIf { it.isNotBlank() } ?: pr.defaultModel}",
                                 style = T.b(10.sp, col.n600),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -213,42 +250,45 @@ fun AdvisorOverlay(vm: AppViewModel, data: AppData) {
         }
 
         val keyStatus = when {
-            vm.apiKeyInput.isNotBlank() -> "Ключ введён (${vm.apiKeyInput.length} символов)"
-            p.needsKey -> "Ключ не задан — ответ соберёт офлайн-разбор"
-            else -> "Ключ не обязателен"
+            vm.apiKeyInput.isNotBlank() -> l.t("ai.keySet", vm.apiKeyInput.length)
+            p.needsKey -> l.t("ai.keyNone")
+            else -> l.t("ai.keyOptional")
         }
-        Field("API-ключ ${p.name}", vm.apiKeyInput, vm::setApiKey, placeholder = p.keyPrefix + "…", password = true, note = "$keyStatus · шифруется и хранится только на телефоне")
-        Field("Модель", s.aiModels[p.key] ?: "", vm::setModel, placeholder = p.defaultModel, note = "Пусто — по умолчанию ${p.defaultModel}")
+        Field(
+            l.t("ai.key", p.name(l)),
+            vm.apiKeyInput,
+            vm::setApiKey,
+            placeholder = p.keyPrefix + "…",
+            password = true,
+            note = l.t("ai.keyNote", keyStatus),
+        )
+        Field(l.t("ai.model"), s.aiModels[p.key] ?: "", vm::setModel, placeholder = p.defaultModel, note = l.t("ai.modelNote", p.defaultModel))
         if (p.key == "custom") {
-            Field("Адрес endpoint (OpenAI-совместимый)", s.customEndpoint, vm::setEndpoint, placeholder = "http://192.168.1.10:11434/v1")
+            Field(l.t("ai.endpoint"), s.customEndpoint, vm::setEndpoint, placeholder = "http://192.168.1.10:11434/v1")
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker("Что отправить агенту")
+            Kicker(l.t("ai.send"))
             ChipFlow {
-                DATASETS.forEach { (k, label) ->
+                DATASETS.forEach { (k, labelKey) ->
                     val on = k in s.aiSets
-                    Chip("${if (on) "■" else "□"} $label", on, { vm.toggleSet(k) })
+                    Chip("${if (on) "■" else "□"} ${l.t(labelKey)}", on, { vm.toggleSet(k) })
                 }
             }
-            Muted(
-                "В запрос уйдёт ${payload.lines().size} строк данных, примерно ${payload.length / 3} токенов. " +
-                    "Период — как на экране отчётов (${Calc(data).range(vm.period, vm.periodOffset).title}).",
-                10.5f,
-            )
+            Muted(l.t("ai.payloadNote", payload.lines().size, payload.length / 3, range.title), 10.5f)
         }
 
-        Field("Вопрос", vm.question, { vm.question = it }, minLines = 3, placeholder = "Например: где я перетрачиваю и на чём реально сэкономить?")
+        Field(l.t("ai.question"), vm.question, { vm.question = it }, minLines = 3, placeholder = l.t("ai.questionHint"))
         ChipFlow {
-            PROMPTS.forEach { q -> SecondaryButton(q, { vm.question = q }, size = 11) }
+            PROMPTS.forEach { q -> SecondaryButton(l.t(q), { vm.question = l.t(q) }, size = 11) }
         }
 
-        PrimaryButton(if (vm.asking) "Агент думает…" else "Отправить агенту", { vm.ask() }, enabled = !vm.asking)
+        PrimaryButton(if (vm.asking) l.t("ai.thinking") else l.t("ai.ask"), { vm.ask() }, enabled = !vm.asking)
 
         if (vm.answer.isNotEmpty()) {
             Blueprint(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text("Ответ · ${vm.answerFrom}".uppercase(), style = T.h(11.sp, col.a700, 0.14.em), modifier = Modifier.weight(1f))
+                    Text(l.t("ai.answer", vm.answerFrom).uppercase(), style = T.h(11.sp, col.a700, 0.14.em), modifier = Modifier.weight(1f))
                     Text(vm.answerMeta, style = T.b(10.5.sp, col.n600))
                 }
                 Spacer(Modifier.height(8.dp))
@@ -260,74 +300,136 @@ fun AdvisorOverlay(vm: AppViewModel, data: AppData) {
     }
 }
 
+// ——— Добавление валюты ———
+
+@Composable
+fun CurrencyPickerOverlay(vm: AppViewModel, c: Calc) {
+    val col = T.c
+    val l = T.l
+    val exclude = c.currencies.toSet()
+    val found = Currencies.search(vm.currencyQuery, exclude).take(40)
+    val draft = vm.currencyDraft
+    OverlayScreen(l.t("cur.addTitle"), l.t("common.close"), {
+        vm.currencyPicker = false
+        vm.currencyQuery = ""
+        vm.currencyDraft = null
+    }) {
+        Field(null, vm.currencyQuery, { vm.currencyQuery = it }, placeholder = l.t("cur.search"))
+        Muted(l.t("cur.rateNote"), 10.5f)
+
+        Column {
+            found.forEach { info ->
+                Row(
+                    Modifier.fillMaxWidth().tap { vm.addCurrency(info.code) }.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(Modifier.size(34.dp).hairline(col.divider), contentAlignment = Alignment.Center) {
+                        Text(info.sym, style = T.h(15.sp, col.a700), maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(info.name.replaceFirstChar { it.uppercase() }, style = T.b(14.sp, col.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(l.t("cur.approxRate", info.code, fmtRate(Currencies.defaultRate(info.code))), style = T.b(11.sp, col.n600))
+                    }
+                    Text(l.t("common.add"), style = T.h(12.sp, col.a700))
+                }
+                SoftDivider()
+            }
+            if (found.isEmpty()) Muted(l.t("cur.notFound"), 12f)
+        }
+
+        SectionTitle(l.t("cur.ownTitle"))
+        if (draft == null) {
+            SecondaryButton(l.t("cur.ownStart"), { vm.currencyDraft = CurrencyDraft() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+        } else {
+            Field(l.t("cur.code"), draft.code, { vm.currencyDraft = draft.copy(code = it.uppercase()) }, placeholder = l.t("cur.codeHint"))
+            Field(l.t("cur.sym"), draft.sym, { vm.currencyDraft = draft.copy(sym = it) }, placeholder = l.t("cur.symHint"))
+            Field(l.t("cur.name"), draft.name, { vm.currencyDraft = draft.copy(name = it) }, placeholder = Currencies.info("TMT").name)
+            Field(l.t("cur.rate"), draft.rate, { vm.currencyDraft = draft.copy(rate = it) }, numeric = true, placeholder = "26,3")
+            PrimaryButton(l.t("cur.add").removePrefix("+ "), { vm.saveCustomCurrency() })
+        }
+    }
+}
+
 // ——— Редакторы ———
 
 @Composable
 fun AccEditOverlay(vm: AppViewModel, c: Calc, e: AccEdit) {
+    val l = T.l
+    val types = listOf("acc.type.card", "acc.type.cash", "acc.type.savings", "acc.type.deposit", "acc.type.other")
     OverlayScreen(
-        if (e.id == null) "Новый счёт" else "Счёт",
-        "Отмена",
+        if (e.id == null) l.t("acc.new") else l.t("acc.one"),
+        l.t("common.cancel"),
         { vm.accEdit = null },
-        footer = { PrimaryButton("Сохранить", { vm.saveAcc() }) },
+        footer = { PrimaryButton(l.t("common.save"), { vm.saveAcc() }) },
     ) {
-        Field("Название", e.name, { vm.accEdit = e.copy(name = it) }, placeholder = "Например, Карта · 4417")
+        Field(l.t("acc.name"), e.name, { vm.accEdit = e.copy(name = it) }, placeholder = l.t("acc.nameHint"))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker("Тип")
+            Kicker(l.t("acc.type"))
             ChipFlow {
-                listOf("Карта", "Кошелёк", "Накопления", "Вклад", "Другое").forEach { t -> Chip(t, e.type == t, { vm.accEdit = e.copy(type = t) }) }
+                types.forEach { key ->
+                    val label = l.t(key)
+                    Chip(label, e.type == label, { vm.accEdit = e.copy(type = label) })
+                }
             }
         }
-        Field("Пометка", e.mask, { vm.accEdit = e.copy(mask = it) }, placeholder = "•• 4417 или «вклад»")
+        Field(l.t("acc.mask"), e.mask, { vm.accEdit = e.copy(mask = it) }, placeholder = l.t("acc.maskHint"))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker("Валюта")
+            Kicker(l.t("acc.cur"))
             if (e.id == null) {
                 CurrencyGrid(c.currencies, e.cur) { vm.accEdit = e.copy(cur = it) }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${e.cur} ${Currencies.sym(e.cur)}", style = T.h(17.sp, T.c.text))
                     Spacer(Modifier.weight(1f))
-                    SecondaryButton("Сменить валюту", { vm.curSheet = CurSheet.Acc(e.id) })
+                    SecondaryButton(l.t("acc.changeCur"), { vm.curSheet = CurSheet.Acc(e.id) })
                 }
             }
         }
         Field(
-            "Текущий баланс, ${Currencies.sym(e.cur)}",
+            l.t("acc.balance", Currencies.sym(e.cur)),
             e.balance,
             { vm.accEdit = e.copy(balance = it) },
             numeric = true,
             placeholder = "0",
-            note = if (e.id != null) "Разница уйдёт в стартовый остаток — история операций не меняется." else null,
+            note = if (e.id != null) l.t("acc.balanceNote") else null,
         )
-        SettingRow("Учитывать в общем балансе") { Toggle(e.inTotal) { vm.accEdit = e.copy(inTotal = it) } }
-        if (e.id != null) DangerButton("Удалить счёт", { vm.askDeleteAcc(e.id) })
+        SettingRow(l.t("acc.inTotalToggle")) { Toggle(e.inTotal) { vm.accEdit = e.copy(inTotal = it) } }
+        if (e.id != null) DangerButton(l.t("acc.delete"), { vm.askDeleteAcc(e.id) })
     }
 }
 
 @Composable
 fun CatEditOverlay(vm: AppViewModel, c: Calc, e: CatEdit) {
+    val l = T.l
     OverlayScreen(
         when {
-            e.id != null -> "Категория"
-            e.income -> "Категория дохода"
-            else -> "Категория расходов"
+            e.id != null -> l.t("cat.one")
+            e.income -> l.t("cat.newIncome")
+            else -> l.t("cat.newExpense")
         },
-        "Отмена",
+        l.t("common.cancel"),
         { vm.catEdit = null },
-        footer = { PrimaryButton("Сохранить", { vm.saveCat() }) },
+        footer = { PrimaryButton(l.t("common.save"), { vm.saveCat() }) },
     ) {
-        Field("Название", e.name, { vm.catEdit = e.copy(name = it) }, placeholder = if (e.income) "Например, Кэшбэк" else "Например, Питомцы")
         Field(
-            "Код (две буквы)",
+            l.t("cat.name"),
+            e.name,
+            { vm.catEdit = e.copy(name = it) },
+            placeholder = if (e.income) l.t("cat.nameHintIncome") else l.t("cat.nameHintExpense"),
+        )
+        Field(
+            l.t("cat.code"),
             e.code,
             { vm.catEdit = e.copy(code = it.take(2).uppercase()) },
-            placeholder = e.name.filter { it.isLetter() }.take(2).uppercase().ifBlank { "ПТ" },
-            note = "Показывается в квадратике рядом с операцией",
+            placeholder = e.name.filter { it.isLetter() }.take(2).uppercase().ifBlank { l.t("cat.codeHint") },
+            note = l.t("cat.codeNote"),
         )
         if (!e.income) {
-            Field("Лимит в месяц, ${Currencies.sym(c.main)}", e.limit, { vm.catEdit = e.copy(limit = it) }, numeric = true, placeholder = "0 — без лимита")
+            Field(l.t("cat.limit", Currencies.sym(c.main)), e.limit, { vm.catEdit = e.copy(limit = it) }, numeric = true, placeholder = l.t("cat.limitHint"))
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Kicker("Цвет категории")
+            Kicker(l.t("cat.color"))
             ChipFlow {
                 Palette.COLORS.forEach { sw ->
                     val on = e.color.equals(sw.hex, ignoreCase = true)
@@ -343,80 +445,31 @@ fun CatEditOverlay(vm: AppViewModel, c: Calc, e: CatEdit) {
                     }
                 }
             }
-            Muted("Выбранный цвет: ${Palette.COLORS.firstOrNull { it.hex.equals(e.color, true) }?.name ?: "свой"} · виден в бюджете, отчётах и списке операций", 10.5f)
+            Muted(l.t("cat.colorNote", Palette.COLORS.firstOrNull { it.hex.equals(e.color, true) }?.name(l) ?: l.t("cat.colorOwn")), 10.5f)
         }
-        if (e.id != null) DangerButton("Удалить категорию", { vm.askDeleteCat(e.id) })
+        if (e.id != null) DangerButton(l.t("cat.delete"), { vm.askDeleteCat(e.id) })
     }
 }
 
 @Composable
 fun GoalEditOverlay(vm: AppViewModel, e: GoalEdit) {
+    val l = T.l
     OverlayScreen(
-        if (e.id == null) "Новая цель" else "Цель",
-        "Отмена",
+        if (e.id == null) l.t("goal.new") else l.t("goal.one"),
+        l.t("common.cancel"),
         { vm.goalEdit = null },
-        footer = { PrimaryButton("Сохранить", { vm.saveGoal() }) },
+        footer = { PrimaryButton(l.t("common.save"), { vm.saveGoal() }) },
     ) {
-        Field("Название", e.name, { vm.goalEdit = e.copy(name = it) }, placeholder = "Например, Отпуск в Грузии")
-        Field("Сколько нужно, ${Currencies.sym(e.cur)}", e.target, { vm.goalEdit = e.copy(target = it) }, numeric = true, placeholder = "0")
+        Field(l.t("goal.name"), e.name, { vm.goalEdit = e.copy(name = it) }, placeholder = l.t("goal.nameHint"))
+        Field(l.t("goal.amount", Currencies.sym(e.cur)), e.target, { vm.goalEdit = e.copy(target = it) }, numeric = true, placeholder = "0")
         if (e.id == null) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kicker("Валюта цели")
+                Kicker(l.t("goal.cur"))
                 CurrencyGrid(vm.calc.currencies, e.cur) { vm.goalEdit = e.copy(cur = it) }
             }
         }
-        Field("Заметка", e.hint, { vm.goalEdit = e.copy(hint = it) }, placeholder = "Например, хочу поехать в мае")
-        if (e.id != null) DangerButton("Удалить цель", { vm.askDeleteGoal(e.id) })
-    }
-}
-
-// ——— Добавление валюты ———
-
-@Composable
-fun CurrencyPickerOverlay(vm: AppViewModel, c: Calc) {
-    val col = T.c
-    val exclude = c.currencies.toSet()
-    val found = Currencies.search(vm.currencyQuery, exclude).take(40)
-    val draft = vm.currencyDraft
-    OverlayScreen("Добавить валюту", "Закрыть", {
-        vm.currencyPicker = false
-        vm.currencyQuery = ""
-        vm.currencyDraft = null
-    }) {
-        Field(null, vm.currencyQuery, { vm.currencyQuery = it }, placeholder = "Поиск: код или название (например, TMT или манат)")
-        Muted("Курс подставится ориентировочный — проверьте и поправьте его в списке валют.", 10.5f)
-
-        Column {
-            found.forEach { info ->
-                Row(
-                    Modifier.fillMaxWidth().tap { vm.addCurrency(info.code) }.padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(Modifier.size(34.dp).hairline(col.divider), contentAlignment = Alignment.Center) {
-                        Text(info.sym, style = T.h(15.sp, col.a700), maxLines = 1)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(info.name.replaceFirstChar { it.uppercase() }, style = T.b(14.sp, col.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${info.code} · ориентировочно ${fmtRate(Currencies.defaultRate(info.code))} ₽", style = T.b(11.sp, col.n600))
-                    }
-                    Text("Добавить", style = T.h(12.sp, col.a700))
-                }
-                SoftDivider()
-            }
-            if (found.isEmpty()) Muted("В каталоге ничего не нашлось — заведите свою валюту ниже", 12f)
-        }
-
-        SectionTitle("Своя валюта")
-        if (draft == null) {
-            SecondaryButton("Завести валюту вручную", { vm.currencyDraft = CurrencyDraft() }, Modifier.fillMaxWidth(), size = 13, upper = true)
-        } else {
-            Field("Код", draft.code, { vm.currencyDraft = draft.copy(code = it.uppercase()) }, placeholder = "Например, TMT")
-            Field("Символ", draft.sym, { vm.currencyDraft = draft.copy(sym = it) }, placeholder = "m, ₼, $…")
-            Field("Название", draft.name, { vm.currencyDraft = draft.copy(name = it) }, placeholder = "туркменские манаты")
-            Field("Курс: сколько рублей за единицу", draft.rate, { vm.currencyDraft = draft.copy(rate = it) }, numeric = true, placeholder = "26,3")
-            PrimaryButton("Добавить валюту", { vm.saveCustomCurrency() })
-        }
+        Field(l.t("goal.hint"), e.hint, { vm.goalEdit = e.copy(hint = it) }, placeholder = l.t("goal.hintHint"))
+        if (e.id != null) DangerButton(l.t("goal.delete"), { vm.askDeleteGoal(e.id) })
     }
 }
 
@@ -425,10 +478,11 @@ fun CurrencyPickerOverlay(vm: AppViewModel, c: Calc) {
 @Composable
 fun CurrencySheet(vm: AppViewModel, c: Calc, sheet: CurSheet) {
     val col = T.c
+    val l = T.l
     BottomSheet({ vm.curSheet = null }) {
         val title = when (sheet) {
-            CurSheet.Main -> "Основная валюта приложения"
-            is CurSheet.Acc -> "Валюта счёта «${c.acc(sheet.id)?.name ?: ""}»"
+            CurSheet.Main -> l.t("cur.sheetMain")
+            is CurSheet.Acc -> l.t("cur.sheetAcc", c.acc(sheet.id)?.name ?: "")
         }
         Text(title.uppercase(), style = T.h(13.sp, col.text, 0.12.em))
         val selected = when (sheet) {
@@ -441,21 +495,19 @@ fun CurrencySheet(vm: AppViewModel, c: Calc, sheet: CurSheet) {
                 is CurSheet.Acc -> vm.setAccCur(sheet.id, code)
             }
         }
-        Muted(
-            if (sheet is CurSheet.Acc) "Баланс и операции счёта пересчитаются по курсу из настроек." else "Отчёты и бюджеты пересчитаются в выбранную валюту.",
-            11f,
-        )
+        Muted(if (sheet is CurSheet.Acc) l.t("cur.sheetAccNote") else l.t("cur.sheetMainNote"), 11f)
     }
 }
 
 @Composable
 fun GoalContributeSheet(vm: AppViewModel, c: Calc, gs: GoalSheet) {
     val col = T.c
+    val l = T.l
     val g = c.d.goals.firstOrNull { it.id == gs.goalId } ?: return
     BottomSheet({ vm.goalSheet = null }) {
-        Text("Отложить на цель".uppercase(), style = T.h(13.sp, col.text, 0.12.em))
-        Text("${g.name} · ${c.fmt(g.saved, g.cur)} из ${c.fmt(g.target, g.cur)}", style = T.b(12.sp, col.n700))
-        Kicker("Сумма")
+        Text(l.t("goal.sheetTitle").uppercase(), style = T.h(13.sp, col.text, 0.12.em))
+        Text(l.t("goal.sheetSub", g.name, c.fmt(g.saved, g.cur), c.fmt(g.target, g.cur)), style = T.b(12.sp, col.n700))
+        Kicker(l.t("goal.sum"))
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             vm.goalPresets(g.cur).forEach { a ->
                 val st = opt(a == gs.amount)
@@ -470,17 +522,18 @@ fun GoalContributeSheet(vm: AppViewModel, c: Calc, gs: GoalSheet) {
                 ) { Text(c.fmt(a, g.cur), style = T.h(12.sp, st.fg), maxLines = 1) }
             }
         }
-        Kicker("Со счёта")
+        Kicker(l.t("goal.fromAcc"))
         ChipFlow {
             c.d.accounts.forEach { a -> Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == gs.from, { vm.goalSheet = gs.copy(from = a.id) }) }
         }
-        PrimaryButton("Отложить ${c.fmt(gs.amount, g.cur)}", { vm.contribute() })
+        PrimaryButton(l.t("goal.putSum", c.fmt(gs.amount, g.cur)), { vm.contribute() })
     }
 }
 
 @Composable
 fun ConfirmSheet(vm: AppViewModel, cf: Confirm) {
     val col = T.c
+    val l = T.l
     BottomSheet({ vm.confirm = null }) {
         Text(cf.title.uppercase(), style = T.h(13.sp, col.text, 0.12.em))
         Text(cf.text, style = T.b(13.sp, col.n700, lineHeight = 19.sp))
@@ -492,7 +545,7 @@ fun ConfirmSheet(vm: AppViewModel, cf: Confirm) {
                     .tap { vm.confirm = null }
                     .padding(12.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text("ОТМЕНА", style = T.h(13.sp, col.text, 0.1.em)) }
+            ) { Text(l.t("common.cancelUpper"), style = T.h(13.sp, col.text, 0.1.em)) }
             DangerButton(cf.action, {
                 vm.confirm = null
                 cf.onYes()

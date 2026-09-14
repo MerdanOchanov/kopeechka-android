@@ -6,6 +6,7 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
+import app.kopeechka.finance.data.Lang
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -33,7 +34,9 @@ import java.util.concurrent.TimeUnit
 
 data class RemoteBackup(val id: String, val name: String, val created: Instant, val size: Long)
 
-class DriveError(message: String) : Exception(message)
+class DriveError(val key: String, val args: List<Any?> = emptyList()) : Exception(key) {
+    fun text(l: Lang) = l.t(key, *args.toTypedArray())
+}
 
 /**
  * Резервные копии в Google Диске через REST API v3.
@@ -42,7 +45,8 @@ class DriveError(message: String) : Exception(message)
  */
 object DriveBackup {
     const val SCOPE = "https://www.googleapis.com/auth/drive.file"
-    private const val FOLDER = "Копеечка — резервные копии"
+    /** Имя папки на Диске берётся из языка интерфейса. */
+    var folderName: String = "Kopeechka"
     private const val FOLDER_MIME = "application/vnd.google-apps.folder"
     private const val API = "https://www.googleapis.com/drive/v3/files"
     private const val UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
@@ -101,11 +105,11 @@ object DriveBackup {
         val req = Request.Builder().url("$API/$id?alt=media").header("Authorization", "Bearer $token").get().build()
         try {
             http.newCall(req).execute().use { r ->
-                if (!r.isSuccessful) throw DriveError("не удалось скачать копию (${r.code})")
-                r.body?.string() ?: throw DriveError("пустой файл")
+                if (!r.isSuccessful) throw DriveError("drive.err.download", listOf(r.code))
+                r.body?.string() ?: throw DriveError("drive.err.empty")
             }
         } catch (e: IOException) {
-            throw DriveError("нет связи с Google Диском")
+            throw DriveError("drive.err.offline")
         }
     }
 
@@ -120,7 +124,7 @@ object DriveBackup {
 
     private fun folderId(token: String, create: Boolean): String? {
         val url = API.toHttpUrl().newBuilder()
-            .addQueryParameter("q", "name='$FOLDER' and mimeType='$FOLDER_MIME' and trashed=false")
+            .addQueryParameter("q", "name='$folderName' and mimeType='$FOLDER_MIME' and trashed=false")
             .addQueryParameter("fields", "files(id)")
             .build()
         call(token, Request.Builder().url(url).get())["files"]?.jsonArray?.firstOrNull()?.let {
@@ -128,7 +132,7 @@ object DriveBackup {
         }
         if (!create) return null
         val meta = buildJsonObject {
-            put("name", FOLDER)
+            put("name", folderName)
             put("mimeType", FOLDER_MIME)
         }
         return call(token, Request.Builder().url("$API?fields=id").post(meta.toString().toRequestBody(jsonType)))["id"]!!.jsonPrimitive.content
@@ -139,21 +143,19 @@ object DriveBackup {
             http.newCall(b.header("Authorization", "Bearer $token").build()).execute().use { r ->
                 val text = r.body?.string().orEmpty()
                 if (!r.isSuccessful) {
-                    throw DriveError(
-                        when (r.code) {
-                            401 -> "доступ истёк, подключите Диск заново"
-                            403 -> "Google запретил доступ (проверьте, что Drive API включён в проекте Google Cloud)"
-                            else -> "ошибка ${r.code}"
-                        },
-                    )
+                    throw when (r.code) {
+                        401 -> DriveError("drive.err.expired")
+                        403 -> DriveError("drive.err.forbidden")
+                        else -> DriveError("drive.err.code", listOf(r.code))
+                    }
                 }
                 return json.parseToJsonElement(text.ifBlank { "{}" }).jsonObject
             }
         } catch (e: IOException) {
-            throw DriveError("нет связи с Google Диском")
+            throw DriveError("drive.err.offline")
         }
     }
 
-    fun formatTime(i: Instant): String =
-        DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", java.util.Locale("ru")).format(i.atZone(ZoneId.systemDefault()))
+    fun formatTime(i: Instant, l: Lang = Lang.RU): String =
+        DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", java.util.Locale(l.code)).format(i.atZone(ZoneId.systemDefault()))
 }

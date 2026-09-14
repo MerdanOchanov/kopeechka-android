@@ -70,6 +70,8 @@ data class Goal(
 data class Settings(
     val mainCur: String = "RUB",
     val dark: Boolean = false,
+    /** "auto" — как в системе, либо "ru" / "en" / "tk". */
+    val lang: String = "auto",
     /** Сколько рублей стоит единица валюты. */
     val rates: Map<String, Double> = Currencies.DEFAULT_RATES,
     /** Валюты, включённые в приложении (первая всегда RUB — база курсов). */

@@ -1,5 +1,6 @@
 package app.kopeechka.finance.net
 
+import app.kopeechka.finance.data.Lang
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.errors.AnthropicIoException
@@ -27,7 +28,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class AiError(message: String) : Exception(message)
+/** Ошибка с ключом перевода: текст собирает вызывающий на языке интерфейса. */
+class AiError(val key: String, val args: List<Any?> = emptyList()) : Exception(key) {
+    fun text(l: Lang) = l.t(key, *args.toTypedArray())
+}
 
 object Ai {
     data class Provider(
@@ -37,13 +41,27 @@ object Ai {
         val defaultModel: String,
         val keyPrefix: String,
         val needsKey: Boolean = true,
-    )
+        val nameKey: String? = null,
+        val vendorKey: String? = null,
+    ) {
+        fun name(l: Lang) = nameKey?.let { l.t(it) } ?: name
+        fun vendor(l: Lang) = vendorKey?.let { l.t(it) } ?: vendor
+    }
 
     val PROVIDERS = listOf(
         Provider("claude", "Claude", "Anthropic", "claude-opus-5", "sk-ant-"),
         Provider("openai", "OpenAI", "GPT", "gpt-5-mini", "sk-"),
         Provider("gemini", "Gemini", "Google", "gemini-2.5-flash", "AIza"),
-        Provider("custom", "Свой endpoint", "OpenAI-совместимый", "llama3.1", "", needsKey = false),
+        Provider(
+            key = "custom",
+            name = "Custom endpoint",
+            vendor = "OpenAI-compatible",
+            defaultModel = "llama3.1",
+            keyPrefix = "",
+            needsKey = false,
+            nameKey = "ai.provider.custom",
+            vendorKey = "ai.provider.customVendor",
+        ),
     )
 
     fun provider(key: String) = PROVIDERS.firstOrNull { it.key == key } ?: PROVIDERS[0]
@@ -62,7 +80,7 @@ object Ai {
                 "openai" -> askOpenAiCompatible("https://api.openai.com/v1", model, apiKey, prompt, "OpenAI")
                 "gemini" -> askGemini(model, apiKey, prompt)
                 else -> {
-                    if (endpoint.isBlank()) throw AiError("Укажите адрес своего endpoint, например http://192.168.1.10:11434/v1")
+                    if (endpoint.isBlank()) throw AiError("ai.err.noEndpoint")
                     askOpenAiCompatible(endpoint.trim().trimEnd('/'), model, apiKey, prompt, "Endpoint")
                 }
             }
@@ -83,23 +101,23 @@ object Ai {
             }
             val msg = client.beta().messages().create(b.build())
             if (msg.stopReason().map { it.toString() }.orElse("") == "refusal") {
-                throw AiError("Модель отказалась отвечать на этот запрос. Переформулируйте вопрос.")
+                throw AiError("ai.err.refusal")
             }
             val text = msg.content().mapNotNull { block -> block.text().map { it.text() }.orElse(null) }.joinToString("\n").trim()
-            if (text.isEmpty()) throw AiError("Claude вернул пустой ответ")
+            if (text.isEmpty()) throw AiError("ai.err.claudeEmpty")
             return text
         } catch (e: UnauthorizedException) {
-            throw AiError("Claude: неверный API-ключ")
+            throw AiError("ai.err.claudeKey")
         } catch (e: PermissionDeniedException) {
-            throw AiError("Claude: у ключа нет доступа к модели $model")
+            throw AiError("ai.err.claudeForbidden", listOf(model))
         } catch (e: NotFoundException) {
-            throw AiError("Claude: модель «$model» не найдена или недоступна")
+            throw AiError("ai.err.claudeModel", listOf(model))
         } catch (e: RateLimitException) {
-            throw AiError("Claude: слишком много запросов, попробуйте через минуту")
+            throw AiError("ai.err.claudeRate")
         } catch (e: AnthropicServiceException) {
-            throw AiError("Claude: ошибка ${e.statusCode()} — ${e.message}")
+            throw AiError("ai.err.claudeApi", listOf(e.statusCode(), e.message))
         } catch (e: AnthropicIoException) {
-            throw AiError("Нет связи с api.anthropic.com")
+            throw AiError("ai.err.claudeOffline")
         } finally {
             client.close()
         }
@@ -123,7 +141,7 @@ object Ai {
         val obj = execute(req, label)
         return obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull
             ?.trim()?.takeIf { it.isNotEmpty() }
-            ?: throw AiError("$label вернул пустой ответ")
+            ?: throw AiError("ai.err.empty", listOf(label))
     }
 
     private fun askGemini(model: String, apiKey: String, prompt: String): String {
@@ -144,7 +162,7 @@ object Ai {
         val parts = obj["candidates"]?.jsonArray?.firstOrNull()?.jsonObject?.get("content")?.jsonObject?.get("parts")?.jsonArray
         return parts?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }?.joinToString("\n")?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?: throw AiError("Gemini вернул пустой ответ")
+            ?: throw AiError("ai.err.empty", listOf("Gemini"))
     }
 
     private fun execute(req: Request, label: String): JsonObject {
@@ -156,19 +174,17 @@ object Ai {
                     val msg = obj?.get("error")?.let { e ->
                         runCatching { e.jsonObject["message"]?.jsonPrimitive?.contentOrNull }.getOrNull() ?: e.toString()
                     } ?: text.take(200)
-                    throw AiError(
-                        when (resp.code) {
-                            401, 403 -> "$label: неверный ключ или нет доступа"
-                            404 -> "$label: модель или адрес не найдены"
-                            429 -> "$label: превышен лимит запросов"
-                            else -> "$label: ошибка ${resp.code} — $msg"
-                        },
-                    )
+                    throw when (resp.code) {
+                        401, 403 -> AiError("ai.err.key", listOf(label))
+                        404 -> AiError("ai.err.model", listOf(label))
+                        429 -> AiError("ai.err.rate", listOf(label))
+                        else -> AiError("ai.err.code", listOf(label, resp.code, msg))
+                    }
                 }
-                return obj ?: throw AiError("$label: непонятный ответ сервера")
+                return obj ?: throw AiError("ai.err.parse", listOf(label))
             }
         } catch (e: IOException) {
-            throw AiError("$label: нет связи (${e.message})")
+            throw AiError("ai.err.offline", listOf(label, e.message))
         }
     }
 }
