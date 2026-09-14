@@ -1,0 +1,112 @@
+<title>Копеечка — иконка</title>
+<style>
+  body { background:#2a2f33; color:#e6eaec; font:14px system-ui; margin:0; padding:20px; }
+  .row { display:flex; gap:24px; align-items:flex-end; flex-wrap:wrap; }
+  .item { text-align:center; }
+  .label { margin-top:6px; font-size:12px; opacity:.7; }
+  .circle svg { clip-path: circle(50% at 50% 50%); }
+  .squircle svg { clip-path: inset(0 round 22%); }
+</style>
+<div class="row">
+  <div class="item">
+    <svg width="200" height="200" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+      <rect width="108" height="108" fill="#1D2D3D"/>
+      <circle cx="54" cy="54" r="31" fill="none" stroke="#B5D9FD" stroke-width="1.8"/>
+      <circle cx="54" cy="54" r="27" fill="none" stroke="#F2F2F3" stroke-opacity="0.4" stroke-width="0.9"/>
+      <g stroke="#B5D9FD" stroke-opacity="0.7" stroke-width="1.2">
+        <path d="M82.2,54 L84.4,54 M81.3,61.3 L83.4,62.1 M78.9,68 L80.8,69.1 M75.1,73.9 L76.7,75.4 M70.3,78.7 L71.6,80.4 M64.6,82.1 L65.5,84.1 M58.3,83.9 L58.7,86.1 M51.7,83.9 L51.3,86.1 M45.4,82.1 L44.5,84.1 M39.7,78.7 L38.4,80.4 M34.9,73.9 L33.3,75.4 M31.1,68 L29.2,69.1 M28.6,61.3 L26.6,62.1 M27.8,54 L25.6,54 M28.6,46.7 L26.6,45.9 M31.1,40 L29.2,38.9 M34.9,34.1 L33.3,32.6 M39.7,29.3 L38.4,27.6 M45.4,25.9 L44.5,23.9 M51.7,24.1 L51.3,21.9 M58.3,24.1 L58.7,21.9 M64.6,25.9 L65.5,23.9 M70.3,29.3 L71.6,27.6 M75.1,34.1 L76.7,32.6 M78.9,40 L80.8,38.9 M81.3,46.7 L83.4,45.9"/>
+      </g>
+
+      <g fill="#F2F2F3">
+        <!-- крылья: три ряда перьев, подняты вверх -->
+        <path d="M49,47 L33,34 L36,43 L49,52 Z"/>
+        <path d="M49,52 L27,44 L32,52 L49,57 Z"/>
+        <path d="M49,57 L29,59 L36,64 L49,62 Z"/>
+        <path d="M59,47 L75,34 L72,43 L59,52 Z"/>
+        <path d="M59,52 L81,44 L76,52 L59,57 Z"/>
+        <path d="M59,57 L79,59 L72,64 L59,62 Z"/>
+        <!-- корпус -->
+        <path d="M49,43 L59,43 L61,58 L54,68 L47,58 Z"/>
+        <!-- хвост -->
+        <path d="M50,64 L58,64 L59,77 L56,73 L54,79 L52,73 L49,77 Z"/>
+        <!-- голова -->
+        <path d="M54,31.5 a5.2,5.2 0 1,0 0.1,0 z"/>
+        <path d="M50,36 L59,36 L58,44 L50,44 Z"/>
+        <!-- клюв -->
+        <path d="M49.6,34.6 L41,37.4 L49.6,40.2 Z"/>
+      </g>
+      <circle cx="52.6" cy="35.4" r="1.2" fill="#1D2D3D"/>
+
+      <g stroke="#F2F2F3" stroke-opacity="0.85" stroke-width="1.2">
+        <path d="M18,23 h10 M23,18 v10 M80,23 h10 M85,18 v10 M18,85 h10 M23,80 v10 M80,85 h10 M85,80 v10"/>
+      </g>
+    </svg>
+    <div class="label">200 px, без маски</div>
+  </div>
+
+  <div class="item circle">
+    <svg width="108" height="108" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+      <rect width="108" height="108" fill="#1D2D3D"/>
+      <circle cx="54" cy="54" r="31" fill="none" stroke="#B5D9FD" stroke-width="1.8"/>
+      <circle cx="54" cy="54" r="27" fill="none" stroke="#F2F2F3" stroke-opacity="0.4" stroke-width="0.9"/>
+      <g fill="#F2F2F3">
+        <path d="M49,47 L33,34 L36,43 L49,52 Z"/>
+        <path d="M49,52 L27,44 L32,52 L49,57 Z"/>
+        <path d="M49,57 L29,59 L36,64 L49,62 Z"/>
+        <path d="M59,47 L75,34 L72,43 L59,52 Z"/>
+        <path d="M59,52 L81,44 L76,52 L59,57 Z"/>
+        <path d="M59,57 L79,59 L72,64 L59,62 Z"/>
+        <path d="M49,43 L59,43 L61,58 L54,68 L47,58 Z"/>
+        <path d="M50,64 L58,64 L59,77 L56,73 L54,79 L52,73 L49,77 Z"/>
+        <path d="M54,31.5 a5.2,5.2 0 1,0 0.1,0 z"/>
+        <path d="M50,36 L59,36 L58,44 L50,44 Z"/>
+        <path d="M49.6,34.6 L41,37.4 L49.6,40.2 Z"/>
+      </g>
+      <circle cx="52.6" cy="35.4" r="1.2" fill="#1D2D3D"/>
+    </svg>
+    <div class="label">круглая маска</div>
+  </div>
+
+  <div class="item squircle">
+    <svg width="108" height="108" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+      <rect width="108" height="108" fill="#1D2D3D"/>
+      <circle cx="54" cy="54" r="31" fill="none" stroke="#B5D9FD" stroke-width="1.8"/>
+      <g fill="#F2F2F3">
+        <path d="M49,47 L33,34 L36,43 L49,52 Z"/>
+        <path d="M49,52 L27,44 L32,52 L49,57 Z"/>
+        <path d="M49,57 L29,59 L36,64 L49,62 Z"/>
+        <path d="M59,47 L75,34 L72,43 L59,52 Z"/>
+        <path d="M59,52 L81,44 L76,52 L59,57 Z"/>
+        <path d="M59,57 L79,59 L72,64 L59,62 Z"/>
+        <path d="M49,43 L59,43 L61,58 L54,68 L47,58 Z"/>
+        <path d="M50,64 L58,64 L59,77 L56,73 L54,79 L52,73 L49,77 Z"/>
+        <path d="M54,31.5 a5.2,5.2 0 1,0 0.1,0 z"/>
+        <path d="M50,36 L59,36 L58,44 L50,44 Z"/>
+        <path d="M49.6,34.6 L41,37.4 L49.6,40.2 Z"/>
+      </g>
+      <circle cx="52.6" cy="35.4" r="1.2" fill="#1D2D3D"/>
+    </svg>
+    <div class="label">скруглённая</div>
+  </div>
+
+  <div class="item circle">
+    <svg width="56" height="56" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+      <rect width="108" height="108" fill="#1D2D3D"/>
+      <circle cx="54" cy="54" r="31" fill="none" stroke="#B5D9FD" stroke-width="1.8"/>
+      <g fill="#F2F2F3">
+        <path d="M49,47 L33,34 L36,43 L49,52 Z"/>
+        <path d="M49,52 L27,44 L32,52 L49,57 Z"/>
+        <path d="M49,57 L29,59 L36,64 L49,62 Z"/>
+        <path d="M59,47 L75,34 L72,43 L59,52 Z"/>
+        <path d="M59,52 L81,44 L76,52 L59,57 Z"/>
+        <path d="M59,57 L79,59 L72,64 L59,62 Z"/>
+        <path d="M49,43 L59,43 L61,58 L54,68 L47,58 Z"/>
+        <path d="M50,64 L58,64 L59,77 L56,73 L54,79 L52,73 L49,77 Z"/>
+        <path d="M54,31.5 a5.2,5.2 0 1,0 0.1,0 z"/>
+        <path d="M50,36 L59,36 L58,44 L50,44 Z"/>
+        <path d="M49.6,34.6 L41,37.4 L49.6,40.2 Z"/>
+      </g>
+    </svg>
+    <div class="label">мелкий размер</div>
+  </div>
+</div>

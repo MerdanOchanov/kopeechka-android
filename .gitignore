@@ -1,0 +1,25 @@
+# Сборка
+build/
+.gradle/
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+
+# Локальные настройки машины (путь к Android SDK)
+local.properties
+
+# Ключи подписи — никогда не коммитим
+*.jks
+*.keystore
+keystore.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# ОС
+.DS_Store
+Thumbs.db
