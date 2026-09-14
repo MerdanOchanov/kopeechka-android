@@ -143,7 +143,8 @@ object Csv {
         return out
     }
 
-    private fun parseDate(s: String): Long? {
+    /** Разбирает 2026-09-14, 14.09.2026 и 14/09/2026 — тем же правилом, что и загрузка CSV. */
+    fun parseDate(s: String): Long? {
         val v = s.trim()
         if (v.isEmpty()) return null
         runCatching { return LocalDate.parse(v, DATE).toEpochDay() }

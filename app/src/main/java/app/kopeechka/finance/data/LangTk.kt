@@ -474,6 +474,12 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "notify.text" to "Şu günki çykdajylary ýazyň — bu birnäçe sekunt",
 
     // ——— seneler ———
+    "date.pickTitle" to "Senäni saýlaň",
+    "date.other" to "Başga sene",
+    "date.typeHint" to "{0}.{1}.{2}",
+    "date.typeNote" to "El bilen hem ýazyp bolar: 14.09.2026 ýa-da 2026-09-14",
+    "date.badDate" to "Sene okalmady — 14.09.2026 görnüşinde synanyşyň",
+    "common.ok" to "Taýýar",
     "date.today" to "Şu gün",
     "date.yesterday" to "Düýn",
     "date.dm" to "{0} {1}",

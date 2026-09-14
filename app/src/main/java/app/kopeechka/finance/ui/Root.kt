@@ -97,6 +97,7 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.customerEdit?.let { CustomerOverlay(vm, calc, it) }
                 if (vm.orderDraft?.picking == true) ItemPickerSheet(vm, calc)
                 vm.paySheet?.let { PaySheetView(vm, calc, it) }
+                if (vm.datePick != null) DateSheet(vm, calc, vm.pickedDate())
             }
             vm.confirm?.let { ConfirmSheet(vm, it) }
             vm.toast?.let {

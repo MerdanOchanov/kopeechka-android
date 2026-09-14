@@ -172,6 +172,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var toast by mutableStateOf<String?>(null)
     var onbStep by mutableStateOf(0)
 
+    /** Открытый календарь: "tx" — дата операции, "order" — дата заказа. */
+    var datePick by mutableStateOf<String?>(null)
+
+    /** Дата, которую сейчас показывает календарь. */
+    fun pickedDate(): Long = when (datePick) {
+        "order" -> orderDraft?.date
+        else -> draft?.date
+    } ?: LocalDate.now().toEpochDay()
+
+    fun pickDate(day: Long) {
+        when (datePick) {
+            "order" -> orderDraft = orderDraft?.copy(date = day)
+            "tx" -> draft = draft?.copy(date = day)
+        }
+        datePick = null
+    }
+
     var orderDraft by mutableStateOf<OrderDraft?>(null)
     var productEdit by mutableStateOf<ProductEdit?>(null)
     var customerEdit by mutableStateOf<CustomerEdit?>(null)
@@ -262,6 +279,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun back(): Boolean {
         when {
             confirm != null -> confirm = null
+            datePick != null -> datePick = null
             paySheet != null -> paySheet = null
             orderDraft?.picking == true -> orderDraft = orderDraft?.copy(picking = false)
             orderDraft != null -> orderDraft = null

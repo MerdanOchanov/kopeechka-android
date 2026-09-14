@@ -470,6 +470,12 @@ internal val EN_STRINGS: Map<String, String> = mapOf(
     "notify.text" to "Log today's expenses — it takes a couple of seconds",
 
     // ——— dates ———
+    "date.pickTitle" to "Pick a date",
+    "date.other" to "Other date",
+    "date.typeHint" to "{2}-{1}-{0}",
+    "date.typeNote" to "Or type it: 2026-09-14 or 14.09.2026",
+    "date.badDate" to "Could not read the date — try 2026-09-14",
+    "common.ok" to "Done",
     "date.today" to "Today",
     "date.yesterday" to "Yesterday",
     "date.dm" to "{0} {1}",

@@ -557,6 +557,12 @@ internal val RU_STRINGS: Map<String, String> = mapOf(
     "notify.text" to "Запишите сегодняшние расходы — это пара секунд",
 
     // ——— даты ———
+    "date.pickTitle" to "Выберите дату",
+    "date.other" to "Другая дата",
+    "date.typeHint" to "{0}.{1}.{2}",
+    "date.typeNote" to "Можно вписать вручную: 14.09.2026 или 2026-09-14",
+    "date.badDate" to "Не разобрал дату — попробуйте 14.09.2026",
+    "common.ok" to "Готово",
     "date.today" to "Сегодня",
     "date.yesterday" to "Вчера",
     "date.dm" to "{0} {1}",

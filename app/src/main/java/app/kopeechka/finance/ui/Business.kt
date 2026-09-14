@@ -355,6 +355,10 @@ fun OrderOverlay(vm: AppViewModel, c: Calc, e: OrderDraft) {
                     val day = c.todayDay - back
                     Chip(c.dayLabel(day), e.date == day, { vm.orderDraft = e.copy(date = day) })
                 }
+                if (e.date < c.todayDay - 9 || e.date > c.todayDay) {
+                    Chip(c.dayLabel(e.date), true, { vm.datePick = "order" })
+                }
+                OtherDateChip(vm, "order")
             }
         }
 

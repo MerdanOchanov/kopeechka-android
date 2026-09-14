@@ -209,7 +209,8 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
                     val day = c.todayDay - back
                     Chip(c.dayLabel(day), d.date == day, { vm.draft = d.copy(date = day) })
                 }
-                if (d.date < c.todayDay - 6) Chip(c.dayLabel(d.date), true, {})
+                if (d.date < c.todayDay - 6 || d.date > c.todayDay) Chip(c.dayLabel(d.date), true, { vm.datePick = "tx" })
+                OtherDateChip(vm, "tx")
             }
 
             Field(
