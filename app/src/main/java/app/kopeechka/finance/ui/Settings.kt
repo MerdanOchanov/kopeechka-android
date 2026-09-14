@@ -39,6 +39,7 @@ import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.DriveBackup
 import app.kopeechka.finance.ui.theme.T
 import java.time.Instant
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -94,9 +95,16 @@ fun CurrencyGrid(codes: List<String>, selected: String?, onPick: (String) -> Uni
     }
 }
 
-fun fmtRate(v: Double) = when {
-    v == v.roundToLong().toDouble() -> v.roundToLong().toString()
-    else -> v.toString().replace('.', ',')
+/** Курс в поле ввода: без «1.09E-5» и с разделителем по языку. */
+fun fmtRate(v: Double): String {
+    if (v == v.roundToLong().toDouble()) return v.roundToLong().toString()
+    val scale = when {
+        abs(v) >= 1 -> 4
+        abs(v) >= 0.01 -> 5
+        else -> 8
+    }
+    val s = java.math.BigDecimal(v).setScale(scale, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+    return if (Currencies.lang.code == "en") s else s.replace('.', ',')
 }
 
 @Composable
@@ -203,6 +211,14 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             SectionTitle(l.t("set.profile"))
             var name by remember { mutableStateOf(s.userName) }
             Field(l.t("set.name"), name, { name = it; vm.settings { st -> st.copy(userName = it) } }, placeholder = l.t("set.nameHint"))
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("csv.section"))
+            SecondaryButton(l.t("csv.export"), { vm.askExportCsv() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            SecondaryButton(l.t("csv.import"), { vm.askImportCsv() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            GhostButton(l.t("csv.template"), { vm.saveTemplate() }, size = 12)
+            Muted(l.t("csv.note"), 10.5f, color = col.n700)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -346,7 +362,7 @@ fun CategoriesPage(vm: AppViewModel, c: Calc) {
                             Text(cat.name, style = T.b(14.sp, col.text))
                             if (!income) {
                                 Text(
-                                    if (cat.limitRub > 0) l.t("cat.limitMonth", c.fmtMain(c.limitMain(cat))) else l.t("cat.noLimit"),
+                                    if (cat.limitBase > 0) l.t("cat.limitMonth", c.fmtMain(c.limitMain(cat))) else l.t("cat.noLimit"),
                                     style = T.b(11.sp, col.n600),
                                 )
                             }

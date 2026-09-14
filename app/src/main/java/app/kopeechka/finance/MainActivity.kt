@@ -29,6 +29,14 @@ class MainActivity : ComponentActivity() {
         if (r.resultCode == RESULT_OK) vm.onAuthResult(r.data) else vm.onAuthCancelled()
     }
 
+    private val createCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.onFileChosen(uri)
+    }
+
+    private val openCsv = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.onFileChosen(uri)
+    }
+
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.setRemind(true) else vm.flash(vm.l.t("msg.noNotifyPermission"))
     }
@@ -40,6 +48,18 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 vm.authRequests.collect { authLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                vm.fileRequests.collect { req ->
+                    if (req.kind == "create") {
+                        createCsv.launch(req.name)
+                    } else {
+                        openCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*"))
+                    }
+                }
             }
         }
 

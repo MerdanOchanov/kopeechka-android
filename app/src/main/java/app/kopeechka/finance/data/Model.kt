@@ -1,5 +1,6 @@
 package app.kopeechka.finance.data
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 const val CAT_TRANSFER = "transfer"
@@ -22,8 +23,13 @@ data class Category(
     val id: String,
     val code: String,
     val name: String,
-    /** Лимит на месяц в рублях (базовая валюта курсов). 0 — без лимита. */
-    val limitRub: Double = 0.0,
+    /**
+     * Лимит на месяц в базовой валюте курсов (доллар). 0 — без лимита.
+     * Имя поля в JSON осталось прежним, чтобы открывались старые копии:
+     * при загрузке версии 1 значение пересчитывается из рублей в доллары.
+     */
+    @SerialName("limitRub")
+    val limitBase: Double = 0.0,
     val income: Boolean = false,
     /** Цвет из палитры, например "#597EA3". Пусто — цвет подберётся автоматически. */
     val color: String = "",
@@ -94,7 +100,7 @@ data class Settings(
 
 @Serializable
 data class AppData(
-    val version: Int = 1,
+    val version: Int = 1, // 1 — курсы в рублях, 2 — в долларах (см. Store.migrate)
     val accounts: List<Account> = emptyList(),
     val categories: List<Category> = emptyList(),
     val txs: List<Tx> = emptyList(),

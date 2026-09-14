@@ -514,7 +514,7 @@ fun BudgetScreen(vm: AppViewModel, c: Calc) {
                 }
             }
         }
-        val noLimit = c.d.categories.filter { !it.income && it.limitRub <= 0 }
+        val noLimit = c.d.categories.filter { !it.income && it.limitBase <= 0 }
         if (noLimit.isNotEmpty()) Muted(l.t("budget.noLimit", noLimit.joinToString { it.name }), 11f)
         SecondaryButton(l.t("budget.cats"), { vm.openPage(Page.CATEGORIES) }, Modifier.fillMaxWidth(), size = 13, upper = true)
     }

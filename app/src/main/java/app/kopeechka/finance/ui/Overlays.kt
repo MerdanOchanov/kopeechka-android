@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,9 +43,11 @@ import app.kopeechka.finance.GoalSheet
 import app.kopeechka.finance.Kind
 import app.kopeechka.finance.data.AppData
 import app.kopeechka.finance.data.Calc
+import app.kopeechka.finance.data.Csv
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.Palette
+import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.ui.theme.T
 
@@ -138,6 +144,27 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
                     maxLines = 1,
                 )
                 Text(Currencies.sym(srcCur), style = T.b(16.sp, col.n700), modifier = Modifier.padding(bottom = 4.dp))
+            }
+
+            // курс пары правится прямо здесь — удобно, когда купил валюту по своему курсу
+            val rateTo = if (isT) (dst?.cur ?: c.main) else c.main
+            if (srcCur != rateTo) {
+                var rateText by remember(srcCur, rateTo, c.rate(srcCur), c.rate(rateTo)) {
+                    mutableStateOf(fmtRate(c.conv(1.0, srcCur, rateTo)))
+                }
+                Row(
+                    Modifier.fillMaxWidth().hairline(col.divider).padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(l.t("add.rate"), style = T.b(12.sp, col.n700))
+                    Spacer(Modifier.weight(1f))
+                    Text("1 ${Currencies.sym(srcCur)} =", style = T.b(13.sp, col.text))
+                    Box(Modifier.width(104.dp)) {
+                        Field(null, rateText, { rateText = it; vm.setPairRate(srcCur, rateTo, it) }, numeric = true, placeholder = "0")
+                    }
+                    Text(Currencies.sym(rateTo), style = T.b(13.sp, col.n700))
+                }
             }
 
             Lane(if (isT) l.t("add.fromAcc") else l.t("add.account")) {
@@ -527,6 +554,62 @@ fun GoalContributeSheet(vm: AppViewModel, c: Calc, gs: GoalSheet) {
             c.d.accounts.forEach { a -> Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == gs.from, { vm.goalSheet = gs.copy(from = a.id) }) }
         }
         PrimaryButton(l.t("goal.putSum", c.fmt(gs.amount, g.cur)), { vm.contribute() })
+    }
+}
+
+/** Выбор периода выгрузки в CSV. */
+@Composable
+fun CsvExportSheet(vm: AppViewModel, c: Calc) {
+    val col = T.c
+    val l = T.l
+    BottomSheet({ vm.csvExportSheet = false }) {
+        Text(l.t("csv.periodTitle").uppercase(), style = T.h(13.sp, col.text, 0.12.em))
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Period.entries.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    row.forEach { p ->
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .hairline(col.divider)
+                                .tap { vm.exportCsv(p.name) }
+                                .padding(horizontal = 10.dp, vertical = 9.dp),
+                        ) {
+                            Text(l.t(p.key), style = T.b(13.sp, col.text))
+                            Text(c.range(p, 0).title, style = T.b(10.5.sp, col.n600), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .hairline(col.divider)
+                    .tap { vm.exportCsv("all") }
+                    .padding(horizontal = 10.dp, vertical = 11.dp),
+            ) {
+                Text(l.t("csv.all"), style = T.b(13.sp, col.text))
+            }
+        }
+        Muted(l.t("csv.note"), 10.5f)
+    }
+}
+
+/** Что нашлось в файле перед загрузкой. */
+@Composable
+fun CsvImportSheet(vm: AppViewModel, p: Csv.Preview) {
+    val col = T.c
+    val l = T.l
+    BottomSheet({ vm.csvPreview = null }) {
+        Text(l.t("csv.importTitle").uppercase(), style = T.h(13.sp, col.text, 0.12.em))
+        Text(l.t("csv.found", p.rows.size), style = T.h(17.sp, col.text))
+        if (p.errors.isNotEmpty()) {
+            Text(l.t("csv.errorsFound", p.errors.size), style = T.b(12.sp, col.danger))
+            p.errors.take(4).forEach { Muted(it, 11f) }
+        }
+        if (p.newAccounts.isNotEmpty()) Muted(l.t("csv.newAccounts", p.newAccounts.joinToString(", ")), 11f)
+        if (p.newCats.isNotEmpty()) Muted(l.t("csv.newCats", p.newCats.joinToString(", ")), 11f)
+        PrimaryButton(l.t("csv.apply", l.n(p.rows.size, "op")), { vm.applyImport() }, enabled = p.rows.isNotEmpty())
     }
 }
 

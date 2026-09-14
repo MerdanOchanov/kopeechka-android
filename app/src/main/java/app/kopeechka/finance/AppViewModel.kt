@@ -3,6 +3,7 @@ package app.kopeechka.finance
 import android.app.Application
 import android.content.Intent
 import android.content.IntentSender
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -14,6 +15,7 @@ import app.kopeechka.finance.data.CAT_GOAL
 import app.kopeechka.finance.data.CAT_TRANSFER
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Category
+import app.kopeechka.finance.data.Csv
 import app.kopeechka.finance.data.CurrencyDef
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Cut
@@ -88,6 +90,9 @@ data class CurrencyDraft(val code: String = "", val sym: String = "", val name: 
 data class GoalEdit(val id: String? = null, val name: String = "", val target: String = "", val hint: String = "", val cur: String = "RUB")
 data class GoalSheet(val goalId: String, val amount: Double, val from: String)
 data class Confirm(val title: String, val text: String, val action: String, val onYes: () -> Unit)
+
+/** Запрос к системному диалогу файлов: "create" — сохранить, "open" — открыть. */
+data class FileRequest(val kind: String, val name: String)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val host = app as KopeechkaApp
@@ -169,6 +174,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             catEdit != null -> catEdit = null
             goalEdit != null -> goalEdit = null
             draft != null -> draft = null
+            csvPreview != null -> csvPreview = null
+            csvExportSheet -> csvExportSheet = false
             currencyDraft != null -> currencyDraft = null
             currencyPicker -> currencyPicker = false
             advisorOpen -> advisorOpen = false
@@ -362,6 +369,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settings { it.copy(rates = it.rates + (code to v)) }
     }
 
+    /**
+     * Курс пары прямо в операции: «1 from = x to».
+     * Меняется курс небазовой валюты, доллар остаётся базой.
+     */
+    fun setPairRate(from: String, to: String, text: String) {
+        val x = text.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: return
+        if (x <= 0 || from == to) return
+        val c = calc
+        when {
+            from != Currencies.BASE -> settings { it.copy(rates = it.rates + (from to x * c.rate(to))) }
+            to != Currencies.BASE -> settings { it.copy(rates = it.rates + (to to c.rate(from) / x)) }
+        }
+    }
+
     /** Добавить валюту из каталога. */
     fun addCurrency(code: String) {
         val c = code.trim().uppercase()
@@ -484,7 +505,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openCatEdit(c: Category?, income: Boolean = false) {
         val cc = calc
         catEdit = if (c == null) CatEdit(income = income, color = Palette.HEXES.first())
-        else CatEdit(c.id, c.name, c.code, if (c.limitRub > 0) cc.limitMain(c).roundToLong().toString() else "", c.income, cc.colorOf(c.id))
+        else CatEdit(c.id, c.name, c.code, if (c.limitBase > 0) cc.limitMain(c).roundToLong().toString() else "", c.income, cc.colorOf(c.id))
     }
 
     fun saveCat() {
@@ -493,17 +514,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (name.isEmpty()) return say("msg.enterCatName")
         val code = e.code.trim().ifBlank { name.filter { it.isLetter() }.take(2) }.uppercase().take(2).ifBlank { "??" }
         val c = calc
-        val limitRub = c.conv(e.limit.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0, c.main, Currencies.BASE)
+        val limitBase = c.conv(e.limit.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0, c.main, Currencies.BASE)
         store.update { s ->
             if (e.id == null) {
                 s.copy(
-                    categories = s.categories + Category("c${s.nextId}", code, name, if (e.income) 0.0 else limitRub, e.income, e.color),
+                    categories = s.categories + Category("c${s.nextId}", code, name, if (e.income) 0.0 else limitBase, e.income, e.color),
                     nextId = s.nextId + 1,
                 )
             } else {
                 s.copy(
                     categories = s.categories.map {
-                        if (it.id == e.id) it.copy(name = name, code = code, limitRub = if (it.income) 0.0 else limitRub, color = e.color) else it
+                        if (it.id == e.id) it.copy(name = name, code = code, limitBase = if (it.income) 0.0 else limitBase, color = e.color) else it
                     },
                 )
             }
@@ -621,6 +642,76 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             store.replace(Demo.empty(store.current.settings))
             say("msg.cleared")
         }
+    }
+
+    // ——— CSV ———
+
+    /** Запрос к системе: "create" — выбрать, куда сохранить, "open" — что открыть. */
+    val fileRequests = MutableSharedFlow<FileRequest>(extraBufferCapacity = 1)
+    var csvExportSheet by mutableStateOf(false)
+    var csvPreview by mutableStateOf<Csv.Preview?>(null)
+    private var pendingFileKind = ""
+    private var pendingExportRange: Pair<Long, Long>? = null
+
+    fun askExportCsv() {
+        csvExportSheet = true
+    }
+
+    /** scope: WEEK / MONTH / QUARTER / YEAR из [Period] либо "all". */
+    fun exportCsv(scope: String) {
+        csvExportSheet = false
+        pendingExportRange = if (scope == "all") null else {
+            val r = calc.range(Period.valueOf(scope), 0)
+            r.from to r.to
+        }
+        pendingFileKind = "export"
+        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-${LocalDate.now()}.csv")) }
+    }
+
+    fun saveTemplate() {
+        pendingFileKind = "template"
+        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-template.csv")) }
+    }
+
+    fun askImportCsv() {
+        pendingFileKind = "import"
+        viewModelScope.launch { fileRequests.emit(FileRequest("open", "")) }
+    }
+
+    /** Пользователь выбрал файл: пишем выгрузку или читаем загрузку. */
+    fun onFileChosen(uri: Uri) {
+        val resolver = ctx.contentResolver
+        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "CSV"
+        try {
+            when (pendingFileKind) {
+                "export" -> {
+                    val r = pendingExportRange
+                    val d = store.current
+                    val count = d.txs.count { t -> r == null || (t.date >= r.first && t.date <= r.second) }
+                    resolver.openOutputStream(uri)?.use { it.write(Csv.export(d, r?.first, r?.second).toByteArray(Charsets.UTF_8)) }
+                    say("csv.exported", l.n(count, "op"), name)
+                }
+                "template" -> {
+                    resolver.openOutputStream(uri)?.use { it.write(Csv.template(store.current, l).toByteArray(Charsets.UTF_8)) }
+                    say("csv.templateSaved", name)
+                }
+                "import" -> {
+                    val text = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val p = Csv.parse(text, store.current, l)
+                    if (p.rows.isEmpty() && p.errors.isEmpty()) say("csv.nothing") else csvPreview = p
+                }
+            }
+        } catch (e: Exception) {
+            say("csv.fileError")
+        }
+        pendingFileKind = ""
+    }
+
+    fun applyImport() {
+        val p = csvPreview ?: return
+        store.update { Csv.apply(it, p, l) }
+        csvPreview = null
+        say("csv.imported", l.n(p.rows.size, "op"))
     }
 
     // ——— ИИ-советник ———

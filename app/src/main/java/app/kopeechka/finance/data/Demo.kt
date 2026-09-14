@@ -5,16 +5,16 @@ import kotlin.math.roundToLong
 
 object Demo {
 
-    /** Стандартные категории на языке интерфейса. Лимиты всегда в рублях — базе курсов. */
+    /** Стандартные категории на языке интерфейса. Лимиты в долларах — базе курсов. */
     fun categories(l: Lang) = listOf(
-        Category("food", l.t("demo.code.food"), l.t("demo.cat.food"), 24000.0, color = "#4F7A5B"),
-        Category("home", l.t("demo.code.home"), l.t("demo.cat.home"), 34000.0, color = "#2C455D"),
-        Category("transport", l.t("demo.code.transport"), l.t("demo.cat.transport"), 6000.0, color = "#597EA3"),
-        Category("cafe", l.t("demo.code.cafe"), l.t("demo.cat.cafe"), 9000.0, color = "#B08A4F"),
-        Category("fun", l.t("demo.code.fun"), l.t("demo.cat.fun"), 7000.0, color = "#8A3B5B"),
-        Category("health", l.t("demo.code.health"), l.t("demo.cat.health"), 5000.0, color = "#3E8E8A"),
-        Category("clothes", l.t("demo.code.clothes"), l.t("demo.cat.clothes"), 6000.0, color = "#A9762F"),
-        Category("other", l.t("demo.code.other"), l.t("demo.cat.other"), 4000.0, color = "#5D5D60"),
+        Category("food", l.t("demo.code.food"), l.t("demo.cat.food"), 260.0, color = "#4F7A5B"),
+        Category("home", l.t("demo.code.home"), l.t("demo.cat.home"), 370.0, color = "#2C455D"),
+        Category("transport", l.t("demo.code.transport"), l.t("demo.cat.transport"), 65.0, color = "#597EA3"),
+        Category("cafe", l.t("demo.code.cafe"), l.t("demo.cat.cafe"), 98.0, color = "#B08A4F"),
+        Category("fun", l.t("demo.code.fun"), l.t("demo.cat.fun"), 76.0, color = "#8A3B5B"),
+        Category("health", l.t("demo.code.health"), l.t("demo.cat.health"), 54.0, color = "#3E8E8A"),
+        Category("clothes", l.t("demo.code.clothes"), l.t("demo.cat.clothes"), 65.0, color = "#A9762F"),
+        Category("other", l.t("demo.code.other"), l.t("demo.cat.other"), 43.0, color = "#5D5D60"),
         Category("income", l.t("demo.code.salary"), l.t("demo.cat.salary"), income = true, color = "#416180"),
         Category("side", l.t("demo.code.side"), l.t("demo.cat.side"), income = true, color = "#6B4E8A"),
     )
@@ -75,10 +75,11 @@ object Demo {
 
     fun create(l: Lang = Lang.RU, today: LocalDate = LocalDate.now()): AppData {
         val cur = l.t("demo.cur")
+        val rubInUsd = Currencies.DEFAULT_RATES["RUB"] ?: 0.0109
         val rate = Currencies.DEFAULT_RATES[cur] ?: 1.0
-        // рубли → валюта демо, округление до «круглого» значения
+        // суммы заданы в рублях: переводим в валюту демо и округляем до «круглого» значения
         fun money(rub: Double): Double {
-            val v = rub / rate
+            val v = rub * rubInUsd / rate
             return when {
                 kotlin.math.abs(v) >= 1000 -> (v / 10).roundToLong() * 10.0
                 kotlin.math.abs(v) >= 100 -> v.roundToLong().toDouble()

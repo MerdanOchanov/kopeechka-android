@@ -87,6 +87,8 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.goalEdit?.let { GoalEditOverlay(vm, it) }
                 vm.curSheet?.let { CurrencySheet(vm, calc, it) }
                 vm.goalSheet?.let { GoalContributeSheet(vm, calc, it) }
+                if (vm.csvExportSheet) CsvExportSheet(vm, calc)
+                vm.csvPreview?.let { CsvImportSheet(vm, it) }
             }
             vm.confirm?.let { ConfirmSheet(vm, it) }
             vm.toast?.let {

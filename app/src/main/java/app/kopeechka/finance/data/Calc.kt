@@ -92,11 +92,11 @@ class Calc(
         return m
     }
 
-    fun limitMain(c: Category) = toMain(c.limitRub, Currencies.BASE)
+    fun limitMain(c: Category) = toMain(c.limitBase, Currencies.BASE)
     val limitTotal by lazy { d.categories.filter { !it.income }.sumOf { limitMain(it) } }
     val budgets: List<BudgetRow> by lazy {
         val sp = spentBy(monthTx)
-        d.categories.filter { !it.income && it.limitRub > 0 }.map { BudgetRow(it, sp[it.id] ?: 0.0, limitMain(it)) }
+        d.categories.filter { !it.income && it.limitBase > 0 }.map { BudgetRow(it, sp[it.id] ?: 0.0, limitMain(it)) }
     }
     val free get() = max(0.0, limitTotal - monthExpense)
     val perDay get() = if (daysLeft > 0) free / (daysLeft + 1) else free

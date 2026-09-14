@@ -35,13 +35,17 @@ object Currencies {
         val inName: String get() = if (lang.code == "ru") ruIn else name
     }
 
-    /** Базовая валюта курсов: 1 RUB = 1. */
-    const val BASE = "RUB"
+    /** Базовая валюта курсов: 1 USD = 1. Все курсы — сколько долларов стоит единица валюты. */
+    const val BASE = "USD"
+
+    /** Версия формата данных: 2 — курсы и лимиты в долларах (в 1 были в рублях). */
+    const val DATA_VERSION = 2
 
     /** Валюты, включённые в новом профиле. */
-    val DEFAULT_CODES = listOf("RUB", "USD", "EUR", "KZT", "TMT")
+    val DEFAULT_CODES = listOf("USD", "RUB", "EUR", "KZT", "TMT")
 
-    val DEFAULT_RATES = mapOf("RUB" to 1.0, "USD" to 92.0, "EUR" to 100.0, "KZT" to 0.18, "TMT" to 26.3)
+    /** Сколько долларов стоит единица валюты. */
+    val DEFAULT_RATES = mapOf("USD" to 1.0, "RUB" to 0.0109, "EUR" to 1.087, "KZT" to 0.00196, "TMT" to 0.2857)
 
     /** Каталог мировых валют: любую можно добавить в настройках. */
     val CATALOG: List<Info> = listOf(
@@ -119,25 +123,25 @@ object Currencies {
     )
 
     /**
-     * Ориентировочный курс в рублях за единицу — подставляется при добавлении валюты.
+     * Ориентировочный курс в долларах за единицу — подставляется при добавлении валюты.
      * Курсы в приложении задаются вручную, это лишь стартовое значение.
      */
     val RATE_HINTS: Map<String, Double> = mapOf(
-        "RUB" to 1.0, "USD" to 92.0, "EUR" to 100.0, "KZT" to 0.18, "TMT" to 26.3,
-        "AZN" to 54.0, "UZS" to 0.0073, "KGS" to 1.05, "TJS" to 8.4, "BYN" to 28.0,
-        "UAH" to 2.2, "GEL" to 34.0, "AMD" to 0.24, "MDL" to 5.2, "TRY" to 2.7,
-        "GBP" to 117.0, "CHF" to 104.0, "CNY" to 12.7, "JPY" to 0.6, "KRW" to 0.068,
-        "INR" to 1.1, "AED" to 25.0, "SAR" to 24.5, "QAR" to 25.0, "ILS" to 25.0,
-        "EGP" to 1.9, "THB" to 2.6, "VND" to 0.0037, "IDR" to 0.0057, "MYR" to 20.0,
-        "SGD" to 68.0, "HKD" to 11.8, "AUD" to 60.0, "NZD" to 55.0, "CAD" to 67.0,
-        "MXN" to 4.6, "BRL" to 17.0, "ARS" to 0.1, "CLP" to 0.1, "COP" to 0.023,
-        "PEN" to 25.0, "ZAR" to 5.0, "NGN" to 0.06, "KES" to 0.7, "MAD" to 9.2,
-        "TND" to 30.0, "PLN" to 23.0, "CZK" to 4.0, "HUF" to 0.25, "RON" to 20.0,
-        "BGN" to 51.0, "RSD" to 0.85, "SEK" to 8.7, "NOK" to 8.6, "DKK" to 13.4,
-        "ISK" to 0.67, "PKR" to 0.33, "BDT" to 0.78, "LKR" to 0.31, "NPR" to 0.69,
-        "MNT" to 0.027, "PHP" to 1.6, "TWD" to 2.9, "IRR" to 0.002, "IQD" to 0.07,
-        "JOD" to 130.0, "KWD" to 300.0, "BHD" to 244.0, "OMR" to 239.0, "LBP" to 0.001,
-        "AFN" to 1.3,
+        "RUB" to 0.0109, "USD" to 1.0, "EUR" to 1.087, "KZT" to 0.002, "TMT" to 0.2859,
+        "AZN" to 0.587, "UZS" to 0.000079, "KGS" to 0.0114, "TJS" to 0.0913, "BYN" to 0.3043,
+        "UAH" to 0.0239, "GEL" to 0.3696, "AMD" to 0.0026, "MDL" to 0.0565, "TRY" to 0.0293,
+        "GBP" to 1.272, "CHF" to 1.13, "CNY" to 0.138, "JPY" to 0.0065, "KRW" to 0.000739,
+        "INR" to 0.012, "AED" to 0.2717, "SAR" to 0.2663, "QAR" to 0.2717, "ILS" to 0.2717,
+        "EGP" to 0.0207, "THB" to 0.0283, "VND" to 0.00004, "IDR" to 0.000062, "MYR" to 0.2174,
+        "SGD" to 0.7391, "HKD" to 0.1283, "AUD" to 0.6522, "NZD" to 0.5978, "CAD" to 0.7283,
+        "MXN" to 0.05, "BRL" to 0.1848, "ARS" to 0.0011, "CLP" to 0.0011, "COP" to 0.00025,
+        "PEN" to 0.2717, "ZAR" to 0.0543, "NGN" to 0.000652, "KES" to 0.0076, "MAD" to 0.1,
+        "TND" to 0.3261, "PLN" to 0.25, "CZK" to 0.0435, "HUF" to 0.0027, "RON" to 0.2174,
+        "BGN" to 0.5543, "RSD" to 0.0092, "SEK" to 0.0946, "NOK" to 0.0935, "DKK" to 0.1457,
+        "ISK" to 0.0073, "PKR" to 0.0036, "BDT" to 0.0085, "LKR" to 0.0034, "NPR" to 0.0075,
+        "MNT" to 0.000293, "PHP" to 0.0174, "TWD" to 0.0315, "IRR" to 0.000022, "IQD" to 0.000761,
+        "JOD" to 1.413, "KWD" to 3.261, "BHD" to 2.652, "OMR" to 2.598, "LBP" to 0.000011,
+        "AFN" to 0.0141,
     )
 
     private val byCode = CATALOG.associateBy { it.code }

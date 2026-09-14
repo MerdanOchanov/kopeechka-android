@@ -41,14 +41,32 @@ class Store(context: Context) {
     fun parseBackup(text: String): AppData {
         val d = json.decodeFromString(AppData.serializer(), text)
         require(d.accounts.isNotEmpty() || d.txs.isNotEmpty() || d.categories.isNotEmpty()) { "Пустая копия" }
-        return d
+        return migrate(d)
+    }
+
+    /**
+     * Версия 1 хранила курсы и лимиты в рублях, версия 2 — в долларах.
+     * Пересчитываем по курсу доллара, который был записан в самих данных.
+     */
+    private fun migrate(d: AppData): AppData {
+        if (d.version >= Currencies.DATA_VERSION) return d
+        val usdPerRub = 1.0 / (d.settings.rates["USD"]?.takeIf { it > 0 } ?: 92.0)
+        val rates = d.settings.rates.mapValues { (_, v) -> v * usdPerRub } + ("USD" to 1.0)
+        return d.copy(
+            version = Currencies.DATA_VERSION,
+            categories = d.categories.map { it.copy(limitBase = it.limitBase * usdPerRub) },
+            settings = d.settings.copy(
+                rates = rates,
+                currencyCodes = (listOf(Currencies.BASE) + d.settings.currencyCodes).distinct(),
+            ),
+        )
     }
 
     private fun load(): AppData {
         val f = file.baseFile
         if (f.exists()) {
             runCatching {
-                val d = json.decodeFromString(AppData.serializer(), String(file.readFully(), Charsets.UTF_8))
+                val d = migrate(json.decodeFromString(AppData.serializer(), String(file.readFully(), Charsets.UTF_8)))
                 Currencies.setLang(Lang.of(d.settings.lang))
                 Currencies.registerCustom(d.settings.customCurrencies)
                 return d
