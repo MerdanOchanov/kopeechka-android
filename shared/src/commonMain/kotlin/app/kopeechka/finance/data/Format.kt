@@ -40,3 +40,19 @@ fun fixed2(value: Double): String {
 /** Число без хвоста, если оно целое: «12» вместо «12.0». */
 fun plainNumber(value: Double): String =
     if (value == value.roundToLong().toDouble()) value.roundToLong().toString() else value.toString()
+
+/**
+ * Десятичная строка с фиксированной точностью и без «1.09E-5»:
+ * округляет до `scale` знаков и убирает хвостовые нули.
+ */
+fun decimalString(value: Double, scale: Int): String {
+    val negative = value < 0
+    var v = abs(value)
+    var pow = 1.0
+    repeat(scale) { pow *= 10 }
+    val units = round(v * pow).toLong()
+    val whole = units / pow.toLong()
+    var frac = (units % pow.toLong()).toString().padStart(scale, '0').trimEnd('0')
+    val body = if (frac.isEmpty()) whole.toString() else "$whole.$frac"
+    return if (negative && units > 0) "-$body" else body
+}

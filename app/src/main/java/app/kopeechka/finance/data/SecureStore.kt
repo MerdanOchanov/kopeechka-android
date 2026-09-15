@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
  * API-ключи ИИ-провайдеров шифруются ключом из Android Keystore (AES-GCM)
  * и никогда не попадают в JSON с данными и в резервные копии.
  */
-class SecureStore(context: Context) {
+class SecureStore(context: Context) : app.kopeechka.finance.SecretStore {
     private val prefs = context.getSharedPreferences("secure_keys", Context.MODE_PRIVATE)
 
     private fun secretKey(): SecretKey {
@@ -30,7 +30,7 @@ class SecureStore(context: Context) {
         return gen.generateKey()
     }
 
-    fun put(name: String, value: String) {
+    override fun put(name: String, value: String) {
         if (value.isBlank()) {
             prefs.edit().remove(name).apply()
             return
@@ -42,7 +42,7 @@ class SecureStore(context: Context) {
         prefs.edit().putString(name, packed).apply()
     }
 
-    fun get(name: String): String {
+    override fun get(name: String): String {
         val packed = prefs.getString(name, null) ?: return ""
         return runCatching {
             val (iv, enc) = packed.split(":").map { Base64.decode(it, Base64.NO_WRAP) }

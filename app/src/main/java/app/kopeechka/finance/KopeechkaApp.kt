@@ -11,11 +11,14 @@ class KopeechkaApp : Application() {
         private set
     lateinit var secure: SecureStore
         private set
+    lateinit var platform: AndroidPlatform
+        private set
 
     override fun onCreate() {
         super.onCreate()
         store = Store(this)
         secure = SecureStore(this)
+        platform = AndroidPlatform(this)
         initAndroidFonts(this, R.font.barlow_condensed_semibold, R.font.barlow_regular)
         Schedules.ensureChannel(this)
     }

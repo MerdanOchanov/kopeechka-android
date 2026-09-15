@@ -31,6 +31,7 @@ kotlin {
             api(compose.foundation)
             api(compose.material3)
             api(compose.ui)
+            api("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
         }
         androidMain.dependencies {
             implementation("io.ktor:ktor-client-okhttp:3.0.3")

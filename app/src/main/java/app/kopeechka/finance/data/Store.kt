@@ -13,17 +13,17 @@ import java.util.concurrent.Executors
  * Запись идёт атомарно (AtomicFile) в фоновом потоке, в памяти — StateFlow.
  * Этот же JSON уходит в резервную копию на Google Диск.
  */
-class Store(context: Context) {
+class Store(context: Context) : app.kopeechka.finance.Storage {
     private val file = AtomicFile(File(context.filesDir, "kopeechka.json"))
     private val writer = Executors.newSingleThreadExecutor()
     private val lock = Any()
 
     private val _data = MutableStateFlow(load())
-    val data: StateFlow<AppData> = _data
+    override val data: StateFlow<AppData> = _data
 
-    val current: AppData get() = _data.value
+    override val current: AppData get() = _data.value
 
-    fun update(f: (AppData) -> AppData) {
+    override fun update(f: (AppData) -> AppData) {
         synchronized(lock) {
             val next = f(_data.value)
             Currencies.setLang(Lang.of(next.settings.lang))
@@ -33,12 +33,12 @@ class Store(context: Context) {
         }
     }
 
-    fun replace(d: AppData) = update { d }
+    override fun replace(d: AppData) = update { d }
 
-    fun exportJson(): String = json.encodeToString(AppData.serializer(), current)
+    override fun exportJson(): String = json.encodeToString(AppData.serializer(), current)
 
     /** Бросает исключение, если JSON не похож на копию «Копеечки». */
-    fun parseBackup(text: String): AppData {
+    override fun parseBackup(text: String): AppData {
         val d = json.decodeFromString(AppData.serializer(), text)
         require(d.accounts.isNotEmpty() || d.txs.isNotEmpty() || d.categories.isNotEmpty()) { "Пустая копия" }
         return migrate(d)
