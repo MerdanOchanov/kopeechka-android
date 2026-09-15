@@ -16,9 +16,12 @@ kotlin {
     }
 
     // Apple-цели собираются только на macOS; на Windows они просто не участвуют в сборке.
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
+    listOf(iosX64(), iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "Shared"
+            isStatic = true
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {
