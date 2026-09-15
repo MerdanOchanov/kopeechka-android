@@ -53,32 +53,33 @@ jobs:
           brew install xcodegen
           cd iosApp && xcodegen generate
 
+      - name: Выбрать симулятор
+        run: |
+          set -eo pipefail
+          # состав симуляторов на раннерах меняется, поэтому берём первый доступный iPhone
+          UDID=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*//')
+          NAME=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1 | sed -E 's/^ +([^(]+) \(.*//')
+          echo "Симулятор: $NAME ($UDID)"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
       - name: Собрать приложение
         run: |
+          set -eo pipefail
           cd iosApp
-          xcodebuild build \
-            -project Kopeechka.xcodeproj \
-            -scheme Kopeechka \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO | tail -40
+          xcodebuild build             -project Kopeechka.xcodeproj             -scheme Kopeechka             -configuration Debug             -sdk iphonesimulator             -destination "id=$SIM_UDID"             -derivedDataPath build             CODE_SIGNING_ALLOWED=NO
 
       - name: Запустить на симуляторе и снять экран
         run: |
-          set -x
-          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 16" | sed -E 's/.*\(([0-9A-F-]+)\).*/\1/')
-          xcrun simctl boot "$DEVICE" || true
-          xcrun simctl bootstatus "$DEVICE" -b
+          set -eo pipefail
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
           APP=$(find iosApp/build/Build/Products -name "Kopeechka.app" -maxdepth 3 | head -1)
-          xcrun simctl install "$DEVICE" "$APP"
-          xcrun simctl launch "$DEVICE" app.kopeechka.finance
-          sleep 15
+          echo "Приложение: $APP"
+          xcrun simctl install "$SIM_UDID" "$APP"
+          xcrun simctl launch "$SIM_UDID" app.kopeechka.finance
+          sleep 20
           mkdir -p artifacts
-          xcrun simctl io "$DEVICE" screenshot artifacts/home.png
-          # второй кадр после перехода в отчёты — проверяем, что интерфейс живой
-          xcrun simctl io "$DEVICE" screenshot artifacts/after-launch.png
+          xcrun simctl io "$SIM_UDID" screenshot artifacts/home.png
 
       - name: Забрать скриншоты
         if: always()
