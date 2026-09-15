@@ -44,4 +44,6 @@ object Icons {
     val User = lucide("user", "M4 20a8 8 0 0 1 16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z")
     val Trash = lucide("trash", "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3")
     val Rate = lucide("rate", "M4 7h13l-3-3M20 17H7l3 3")
+    val Clock = lucide("clock", "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 7.5V12l3 2")
+    val Bag = lucide("bag", "M4.5 8h15l-1.2 12H5.7L4.5 8z", "M9 8V6.2a3 3 0 0 1 6 0V8")
 }

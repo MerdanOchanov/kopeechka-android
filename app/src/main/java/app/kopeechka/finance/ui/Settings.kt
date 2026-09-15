@@ -137,14 +137,14 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                 },
             ) { vm.openPage(Page.BACKUP) }
             NavRow(
-                Icons.Wallet,
+                Icons.Clock,
                 l.t("debt.title"),
                 if (c.d.debts.isEmpty()) l.t("debt.navEmpty")
                 else l.t("debt.navSub", c.fmtMain(c.debtStats().lentLeft), c.fmtMain(c.debtStats().borrowedLeft)),
             ) { vm.openPage(Page.DEBTS) }
             if (s.business) {
                 NavRow(
-                    Icons.Rate,
+                    Icons.Bag,
                     l.t("biz.title"),
                     l.t("biz.navSub", l.n(c.d.orders.size, "order"), l.n(c.d.customers.size, "customer")),
                 ) { vm.openPage(Page.BUSINESS) }

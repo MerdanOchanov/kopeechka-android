@@ -388,7 +388,7 @@ fun DebtFields(vm: AppViewModel, c: Calc, d: app.kopeechka.finance.Draft) {
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(l.t("debt.dueLabel"), style = T.b(12.sp, col.n700), modifier = Modifier.weight(1f))
+        Text(l.t("debt.dueRow"), style = T.b(12.sp, col.n700), modifier = Modifier.weight(1f))
         Text(
             d.due?.let { c.dayLabel(it) } ?: l.t("debt.setDue"),
             style = T.b(12.5.sp, if (d.due == null) col.a700 else col.text),
