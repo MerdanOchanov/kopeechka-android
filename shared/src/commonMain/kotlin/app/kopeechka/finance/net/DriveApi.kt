@@ -9,11 +9,11 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.request
-import io.ktor.client.request.url
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -65,6 +65,10 @@ object DriveApi {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Загрузка в два шага: сначала метаданные (имя и папка), потом содержимое.
+     * multipart/related Google принимал молча, теряя имя файла, — так надёжнее.
+     */
     suspend fun upload(token: String, content: String, name: String): String {
         val folder = folderId(token, create = true)!!
         val meta = buildJsonObject {
@@ -72,24 +76,21 @@ object DriveApi {
             put("mimeType", "application/json")
             put("parents", buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive(folder)) })
         }
-        // multipart/related собираем руками: Drive ждёт именно его, а не form-data
-        val boundary = "kopeechka-" + name.hashCode().toString(16)
-        val body = buildString {
-            append("--").append(boundary).append("\r\n")
-            append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-            append(meta.toString()).append("\r\n")
-            append("--").append(boundary).append("\r\n")
-            append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-            append(content).append("\r\n")
-            append("--").append(boundary).append("--")
-        }
-        val resp = send(token) {
-            method = io.ktor.http.HttpMethod.Post
-            url("$UPLOAD?uploadType=multipart&fields=id,name")
-            contentType(ContentType.parse("multipart/related; boundary=$boundary"))
-            setBody(body)
-        }
-        check(resp)
+        val created = parse(
+            check(
+                send(token, HttpMethod.Post, "$API?fields=id") {
+                    contentType(ContentType.Application.Json)
+                    setBody(meta.toString())
+                },
+            ),
+        )
+        val id = created["id"]!!.jsonPrimitive.content
+        check(
+            send(token, HttpMethod.Patch, "$UPLOAD/$id?uploadType=media") {
+                contentType(ContentType.Application.Json)
+                setBody(content)
+            },
+        )
         return name
     }
 
@@ -97,9 +98,7 @@ object DriveApi {
         val folder = folderId(token, create = false) ?: return emptyList()
         val obj = parse(
             check(
-                send(token) {
-                    method = io.ktor.http.HttpMethod.Get
-                    url(API)
+                send(token, HttpMethod.Get, API) {
                     parameter("q", "'$folder' in parents and trashed=false")
                     parameter("orderBy", "createdTime desc")
                     parameter("fields", "files(id,name,createdTime,size)")
@@ -119,10 +118,7 @@ object DriveApi {
     }
 
     suspend fun download(token: String, id: String): String {
-        val resp = send(token) {
-            method = io.ktor.http.HttpMethod.Get
-            url("$API/$id?alt=media")
-        }
+        val resp = send(token, HttpMethod.Get, "$API/$id?alt=media")
         if (resp.status.value !in 200..299) throw DriveError("drive.err.download", listOf(resp.status.value))
         return resp.bodyAsText().ifBlank { throw DriveError("drive.err.empty") }
     }
@@ -131,10 +127,7 @@ object DriveApi {
     suspend fun prune(token: String, keep: Int = 10) {
         list(token).drop(keep).forEach { f ->
             runCatching {
-                send(token) {
-                    method = io.ktor.http.HttpMethod.Delete
-                    url("$API/${f.id}")
-                }
+                send(token, HttpMethod.Delete, "$API/${f.id}")
             }
         }
     }
@@ -142,9 +135,7 @@ object DriveApi {
     private suspend fun folderId(token: String, create: Boolean): String? {
         val found = parse(
             check(
-                send(token) {
-                    method = io.ktor.http.HttpMethod.Get
-                    url(API)
+                send(token, HttpMethod.Get, API) {
                     parameter("q", "name='$folderName' and mimeType='$FOLDER_MIME' and trashed=false")
                     parameter("fields", "files(id)")
                 },
@@ -158,9 +149,7 @@ object DriveApi {
         }
         val made = parse(
             check(
-                send(token) {
-                    method = io.ktor.http.HttpMethod.Post
-                    url("$API?fields=id")
+                send(token, HttpMethod.Post, "$API?fields=id") {
                     contentType(ContentType.Application.Json)
                     setBody(meta.toString())
                 },
@@ -169,15 +158,23 @@ object DriveApi {
         return made["id"]!!.jsonPrimitive.content
     }
 
-    private suspend fun send(token: String, build: HttpRequestBuilder.() -> Unit): HttpResponse =
+    private suspend fun send(
+        token: String,
+        method: HttpMethod,
+        urlString: String,
+        configure: HttpRequestBuilder.() -> Unit = {},
+    ): HttpResponse =
         try {
-            http.request {
+            http.request(urlString) {
+                this.method = method
                 header("Authorization", "Bearer $token")
-                build()
+                configure()
             }
         } catch (e: DriveError) {
             throw e
         } catch (e: Exception) {
+            // причина видна в логе: без неё «нет связи» ничего не объясняет
+            println("Kopeechka/Drive: запрос не прошёл — $e")
             throw DriveError("drive.err.offline")
         }
 

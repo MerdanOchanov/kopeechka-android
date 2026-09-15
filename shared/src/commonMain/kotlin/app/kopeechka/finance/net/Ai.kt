@@ -144,13 +144,13 @@ object Ai {
         url: String,
         body: JsonObject,
         model: String = "",
-        headers: io.ktor.client.request.HttpRequestBuilder.() -> Unit,
+        configure: io.ktor.client.request.HttpRequestBuilder.() -> Unit,
     ): JsonObject {
         val claude = label == "Claude"
         val resp = try {
             http.post(url) {
                 contentType(ContentType.Application.Json)
-                headers()
+                configure()
                 setBody(body.toString())
             }
         } catch (e: AiError) {
