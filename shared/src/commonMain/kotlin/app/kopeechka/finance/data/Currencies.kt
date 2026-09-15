@@ -1,8 +1,5 @@
 package app.kopeechka.finance.data
 
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -188,16 +185,13 @@ object Currencies {
             .filter { q.isEmpty() || it.code.lowercase().startsWith(q) || it.name.lowercase().contains(q) || it.sym.lowercase() == q }
     }
 
-    private var whole = DecimalFormat("#,##0")
-    private var cents = DecimalFormat("#,##0.00")
+    /** Разделители зависят от языка: 9 024,50 против 9,024.50 */
+    private var groupSep = ' '
+    private var decimalSep = ','
 
     private fun buildFormats() {
-        val symbols = DecimalFormatSymbols(Locale(lang.code)).apply {
-            groupingSeparator = if (lang.code == "en") ',' else ' '
-            decimalSeparator = if (lang.code == "en") '.' else ','
-        }
-        whole = DecimalFormat("#,##0", symbols)
-        cents = DecimalFormat("#,##0.00", symbols)
+        groupSep = if (lang.code == "en") ',' else ' '
+        decimalSep = if (lang.code == "en") '.' else ','
     }
 
     init {
@@ -206,11 +200,11 @@ object Currencies {
 
     /** 112 480 ₽ — без знака, модуль берёт вызывающий. */
     fun fmt(v: Double, cur: String, kopecks: Boolean = false): String {
-        val n = if (kopecks) cents.format(v) else whole.format(v.roundToLong())
+        val n = if (kopecks) groupDecimal(v, groupSep, decimalSep) else groupNumber(v.roundToLong(), groupSep)
         return n + " " + sym(cur)
     }
 
-    fun fmtNumber(v: Double): String = whole.format(v.roundToLong())
+    fun fmtNumber(v: Double): String = groupNumber(v.roundToLong(), groupSep)
 
     /** «−1 840 ₽» / «+96 400 ₽» */
     fun fmtSigned(v: Double, cur: String, kopecks: Boolean = false): String =

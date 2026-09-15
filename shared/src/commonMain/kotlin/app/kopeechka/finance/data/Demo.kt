@@ -1,6 +1,6 @@
 package app.kopeechka.finance.data
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -144,7 +144,7 @@ object Demo {
     /** Прайс, клиенты, заказы и операции дохода по оплаченным заказам. */
     data class Biz(val products: List<Product>, val customers: List<Customer>, val orders: List<Order>, val txs: List<Tx>)
 
-    fun bizData(l: Lang, cur: String, today: LocalDate = LocalDate.now(), acc: String = "card"): Biz {
+    fun bizData(l: Lang, cur: String, today: LocalDate = today(), acc: String = "card"): Biz {
         fun money(rub: Double) = inCur(rub, cur)
         val products = PRODUCTS.map { Product(it.id, l.t(it.nameKey), money(it.price), money(it.cost), l.t(it.unitKey)) }
         val customers = listOf(
@@ -185,7 +185,7 @@ object Demo {
     fun create(
         l: Lang = Lang.RU,
         cur: String = l.t("demo.cur"),
-        today: LocalDate = LocalDate.now(),
+        today: LocalDate = today(),
         business: Boolean = false,
     ): AppData {
         fun money(rub: Double) = inCur(rub, cur)

@@ -61,7 +61,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
-import java.time.LocalDate
+import app.kopeechka.finance.data.today
+import app.kopeechka.finance.data.toEpochDay
+import app.kopeechka.finance.data.isoString
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -85,7 +87,7 @@ data class Draft(
     val from: String = "",
     val to: String = "",
     val note: String = "",
-    val date: Long = LocalDate.now().toEpochDay(),
+    val date: Long = today().toEpochDay(),
     // ——— долг ———
     /** DebtKind.LENT — дал в долг, DebtKind.BORROWED — взял. */
     val debtKind: String = DebtKind.LENT,
@@ -161,7 +163,7 @@ data class OrderDraft(
     val customerId: String = "",
     /** Имя клиента, которого заводим прямо в заказе. */
     val newCustomer: String = "",
-    val date: Long = LocalDate.now().toEpochDay(),
+    val date: Long = today().toEpochDay(),
     val items: List<ItemDraft> = emptyList(),
     val discount: String = "",
     val extraCost: String = "",
@@ -205,7 +207,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "order" -> orderDraft?.date
         "due" -> draft?.due ?: draft?.date?.plus(30)
         else -> draft?.date
-    } ?: LocalDate.now().toEpochDay()
+    } ?: today().toEpochDay()
 
     fun pickDate(day: Long) {
         when (datePick) {
@@ -357,7 +359,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun finishOnboarding() {
         val cur = onbCurrency()
         val keep = store.current.settings
-        val demo = Demo.create(l, cur, LocalDate.now(), onbBusiness)
+        val demo = Demo.create(l, cur, today(), onbBusiness)
         store.replace(
             demo.copy(
                 settings = keep.copy(
@@ -918,7 +920,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             r.from to r.to
         }
         pendingFileKind = "export"
-        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-${LocalDate.now()}.csv")) }
+        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-${today().isoString()}.csv")) }
     }
 
     fun saveTemplate() {
@@ -1151,7 +1153,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun loadBizDemo() {
         val d = store.current
         val acc = d.accounts.firstOrNull()?.id ?: return say("msg.noAccount")
-        val biz = Demo.bizData(l, d.settings.mainCur, LocalDate.now(), acc)
+        val biz = Demo.bizData(l, d.settings.mainCur, today(), acc)
         store.update { s ->
             s.copy(
                 categories = withBizCats(s),
@@ -1472,7 +1474,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun exportOrders() {
         pendingFileKind = "orders"
         pendingExportRange = calc.range(bizPeriod, bizOffset).let { it.from to it.to }
-        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-orders-${LocalDate.now()}.csv")) }
+        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-orders-${today().isoString()}.csv")) }
     }
 
     // ——— ИИ-советник ———

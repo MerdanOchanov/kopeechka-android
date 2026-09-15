@@ -1,7 +1,6 @@
 package app.kopeechka.finance.data
 
-import java.time.DayOfWeek
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -39,7 +38,7 @@ data class Slice(val name: String, val value: Double, val pct: String, val color
 /** Все вычисления над данными: балансы, бюджеты, отчёты. Суммы — в основной валюте. */
 class Calc(
     val d: AppData,
-    val today: LocalDate = LocalDate.now(),
+    val today: LocalDate = today(),
     val l: Lang = Lang.of(d.settings.lang),
 ) {
     val s = d.settings
@@ -114,7 +113,7 @@ class Calc(
         val diff = todayDay - day
         if (diff == 0L) return l.t("date.today")
         if (diff == 1L) return l.t("date.yesterday")
-        val dt = LocalDate.ofEpochDay(day)
+        val dt = epochDate(day)
         val m = l.monthsGen[dt.monthValue - 1]
         return if (dt.year == today.year) l.t("date.dm", dt.dayOfMonth, m) else l.t("date.dmy", dt.dayOfMonth, m, dt.year)
     }
@@ -124,7 +123,7 @@ class Calc(
     /** offset: 0 — текущий период, −1 — предыдущий и так далее. */
     fun range(p: Period, offset: Int): Range = when (p) {
         Period.WEEK -> {
-            val start = today.with(DayOfWeek.MONDAY).plusWeeks(offset.toLong())
+            val start = today.startOfWeek().plusWeeks(offset.toLong())
             val end = start.plusDays(6)
             val title = if (start.month == end.month) {
                 l.t("date.weekRange", start.dayOfMonth, end.dayOfMonth, l.monthsGen[start.monthValue - 1])
@@ -161,7 +160,7 @@ class Calc(
     fun expenseIn(r: Range) = txIn(r).filter { it.amount < 0 }.sumOf { -txMain(it) }
     fun incomeIn(r: Range) = txIn(r).filter { it.amount > 0 }.sumOf { txMain(it) }
 
-    fun weekday(day: Long) = LocalDate.ofEpochDay(day).dayOfWeek.value - 1 // 0 = пн
+    fun weekday(day: Long) = epochDate(day).dayOfWeekValue - 1 // 0 = пн
 
     fun breakdown(r: Range, cut: Cut): List<Slice> {
         val within = txIn(r)
@@ -209,11 +208,11 @@ class Calc(
                 (0..6).map { l.week[it] to agg[it] }
             }
             p == Period.WEEK -> (0..6).map { i ->
-                val day = LocalDate.ofEpochDay(r.from).plusDays(i.toLong())
+                val day = epochDate(r.from).plusDays(i.toLong())
                 l.week[i] to sum(day.toEpochDay(), day.toEpochDay())
             }
             p == Period.MONTH -> {
-                val start = LocalDate.ofEpochDay(r.from)
+                val start = epochDate(r.from)
                 val len = start.lengthOfMonth()
                 val out = mutableListOf<Pair<String, Double>>()
                 var day = 1
@@ -225,11 +224,11 @@ class Calc(
                 out
             }
             p == Period.QUARTER -> (0..2).map { i ->
-                val m = LocalDate.ofEpochDay(r.from).plusMonths(i.toLong())
+                val m = epochDate(r.from).plusMonths(i.toLong())
                 l.monthsShort[m.monthValue - 1] to sum(m.toEpochDay(), m.withDayOfMonth(m.lengthOfMonth()).toEpochDay())
             }
             else -> (0..11).map { i ->
-                val m = LocalDate.ofEpochDay(r.from).plusMonths(i.toLong())
+                val m = epochDate(r.from).plusMonths(i.toLong())
                 l.monthsShort[m.monthValue - 1] to sum(m.toEpochDay(), m.withDayOfMonth(m.lengthOfMonth()).toEpochDay())
             }
         }
@@ -255,7 +254,7 @@ class Calc(
         val r = range(Period.WEEK, 0)
         val exp = d.txs.filter { isReal(it) && it.amount < 0 }
         val raw = (0..6).map { i ->
-            val day = LocalDate.ofEpochDay(r.from).plusDays(i.toLong()).toEpochDay()
+            val day = epochDate(r.from).plusDays(i.toLong()).toEpochDay()
             l.week[i] to exp.filter { it.date == day }.sumOf { -txMain(it) }
         }
         val mx = raw.maxOfOrNull { it.second } ?: 0.0

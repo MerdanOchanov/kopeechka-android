@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Kopeechka"
 include(":app")
+include(":shared")
