@@ -57,8 +57,9 @@ jobs:
         run: |
           set -eo pipefail
           # состав симуляторов на раннерах меняется, поэтому берём первый доступный iPhone
-          UDID=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*//')
-          NAME=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1 | sed -E 's/^ +([^(]+) \(.*//')
+          LINE=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1)
+          UDID=$(echo "$LINE" | grep -oE "[0-9A-F]{8}-[0-9A-F-]{27}")
+          NAME=$(echo "$LINE" | sed -E "s/^ *//; s/ [(].*//")
           echo "Симулятор: $NAME ($UDID)"
           echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
 
