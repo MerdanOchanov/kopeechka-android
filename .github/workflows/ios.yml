@@ -35,7 +35,9 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - name: Общий код без привязки к платформе
-        run: ./gradlew :shared:compileCommonMainKotlinMetadata --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew :shared:compileCommonMainKotlinMetadata --no-daemon
 
       - name: Framework для симулятора
         run: ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 --no-daemon
