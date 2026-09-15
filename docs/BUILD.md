@@ -35,8 +35,24 @@ gradlew.bat :shared:compileCommonMainKotlinMetadata
 коде нужен `kotlin.concurrent.Volatile`). Android-сборка такие места пропускает,
 поэтому запускать её стоит после каждой правки общего кода.
 
-Цели `iosX64`, `iosArm64` и `iosSimulatorArm64` объявлены, но компилируются
-только на macOS с Xcode.
+Цели `iosX64`, `iosArm64` и `iosSimulatorArm64` компилируются только на macOS
+с Xcode, поэтому iOS собирается в облаке: workflow `.github/workflows/ios.yml`
+на macOS-раннере линкует `Shared.framework`, генерирует Xcode-проект из
+`iosApp/project.yml` утилитой XcodeGen, собирает приложение, запускает его
+на симуляторе и выкладывает скриншот артефактом. Запустить вручную:
+**Actions → iOS → Run workflow**.
+
+На macOS то же самое делается локально:
+
+```bash
+./gradlew :shared:linkDebugFrameworkIosSimulatorArm64
+cd iosApp && xcodegen generate && open Kopeechka.xcodeproj
+```
+
+Две грабли, на которые уже наступили: `gradlew` должен быть исполняемым
+(`git update-index --chmod=+x gradlew`), а путь поиска фреймворка в Xcode
+задаётся через `$(PLATFORM_NAME)` — в `$(SDK_NAME)` есть версия SDK,
+и папка не находится.
 
 ## Сборка
 
