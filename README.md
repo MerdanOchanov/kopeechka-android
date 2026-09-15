@@ -4,7 +4,7 @@
 резервные копии в собственный Google Диск и ИИ-советник по своим данным.
 Всё хранится на телефоне — сервера у приложения нет.
 
-Kotlin · Jetpack Compose · minSdk 26 (Android 8.0) · без аналитики и рекламы.
+Kotlin Multiplatform · Compose Multiplatform · Android 8.0+ и iOS 15+ · без аналитики и рекламы.
 
 **[Скачать APK последней сборки](https://github.com/MerdanOchanov/kopeechka-android/releases/latest)** —
 тестовая сборка, подписана отладочным ключом. Резервные копии в Google Диск заработают
@@ -98,21 +98,29 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Структура
 
+Приложение собрано как Kotlin Multiplatform: почти весь код общий, платформам
+остаются только их особенности.
+
 ```
-app/src/main/java/app/kopeechka/finance/
-  data/   Model.kt · Store.kt (JSON) · Calc.kt (балансы, бюджеты, отчёты)
-          Business.kt (заказы, клиенты, прайс) · Debts.kt (долги)
-          Currencies.kt (каталог валют)
-          Palette.kt · Demo.kt · SecureStore.kt
-  net/    Ai.kt (Claude SDK, OpenAI, Gemini, свой endpoint) · DriveBackup.kt (Drive REST v3)
-  work/   Workers.kt (ежедневная копия, вечернее напоминание)
-  ui/     Root.kt · Screens.kt · Settings.kt · Overlays.kt · Business.kt · Debts.kt
-          DateSheet.kt (календарь)
-          Components.kt · Icons.kt
-          theme/Theme.kt (токены Industry, шрифты Barlow)
-  AppViewModel.kt · MainActivity.kt · KopeechkaApp.kt
-tools/    icon-preview.html — эскиз иконки в браузере
+shared/src/commonMain/    общий код — данные, расчёты, языки, сеть и весь интерфейс
+  data/    Model.kt · Calc.kt · Business.kt · Debts.kt · Csv.kt · Currencies.kt
+           Dates.kt · Format.kt · Palette.kt · Demo.kt · Lang*.kt
+  net/     Ai.kt (Claude, OpenAI, Gemini, свой endpoint) · DriveApi.kt · Http.kt
+  ui/      Root.kt · Screens.kt · Overlays.kt · Settings.kt · Business.kt
+           Debts.kt · DateSheet.kt · Components.kt · Icons.kt · theme/
+  AppViewModel.kt · Ports.kt (границы с платформой)
+
+shared/src/androidMain/   движок HTTP и шрифты с запасным семейством для кириллицы
+shared/src/iosMain/       файл данных, Keychain, уведомления, точка входа Compose
+
+app/                      Android: точка входа, реализации портов, фоновые задачи
+iosApp/                   iOS: SwiftUI-обёртка и project.yml для XcodeGen
+tools/                    icon-preview.html — эскиз иконки в браузере
 ```
+
+`Ports.kt` описывает всё, чего не бывает в общем коде: файл данных, шифрованные
+ключи, напоминания, системные диалоги файлов и вход в Google. Android и iOS
+реализуют эти интерфейсы по-своему, а экраны об этом не знают.
 
 ## Происхождение
 

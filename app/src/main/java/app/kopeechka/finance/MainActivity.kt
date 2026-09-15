@@ -15,26 +15,33 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.kopeechka.finance.ui.KopeechkaRoot
 import app.kopeechka.finance.ui.theme.KopeechkaTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private val vm: AppViewModel by viewModels()
+    private val host by lazy { application as KopeechkaApp }
+
+    private val vm: AppViewModel by viewModels {
+        viewModelFactory { initializer { AppViewModel(host.store, host.secure, host.platform) } }
+    }
 
     private val authLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode == RESULT_OK) vm.onAuthResult(r.data) else vm.onAuthCancelled()
+        if (r.resultCode == RESULT_OK) host.platform.onAuthResult(r.data) else host.platform.onAuthCancelled()
     }
 
     private val createCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        if (uri != null) vm.onFileChosen(uri)
+        host.platform.onFileChosen(uri)
     }
 
     private val openCsv = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.onFileChosen(uri)
+        host.platform.onFileChosen(uri)
     }
 
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -47,13 +54,13 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                vm.authRequests.collect { authLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+                host.platform.authRequests.collect { authLauncher.launch(IntentSenderRequest.Builder(it).build()) }
             }
         }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                vm.fileRequests.collect { req ->
+                host.platform.prompts.collect { req ->
                     if (req.kind == "create") {
                         createCsv.launch(req.name)
                     } else {

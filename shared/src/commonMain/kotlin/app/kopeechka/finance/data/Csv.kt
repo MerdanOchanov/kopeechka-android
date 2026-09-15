@@ -1,7 +1,6 @@
 package app.kopeechka.finance.data
 
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.LocalDate
 import kotlin.math.abs
 
 /**
@@ -13,7 +12,6 @@ import kotlin.math.abs
  */
 object Csv {
     val COLUMNS = listOf("date", "type", "amount", "currency", "account", "to_account", "to_amount", "category", "note")
-    private val DATE = DateTimeFormatter.ISO_LOCAL_DATE
 
     data class Row(
         val line: Int,
@@ -41,7 +39,7 @@ object Csv {
     private fun esc(v: String): String =
         if (v.any { it == ';' || it == ',' || it == '"' || it == '\n' }) "\"" + v.replace("\"", "\"\"") + "\"" else v
 
-    private fun num(v: Double): String = if (v == v.toLong().toDouble()) v.toLong().toString() else String.format("%.2f", v)
+    private fun num(v: Double): String = if (v == v.toLong().toDouble()) v.toLong().toString() else fixed2(v)
 
     /** `from`/`to` — границы периода в днях эпохи; null — выгрузить всё. */
     fun export(d: AppData, from: Long? = null, to: Long? = null): String {
@@ -58,7 +56,7 @@ object Csv {
                 else -> if (t.amount > 0) "income" else "expense"
             }
             val cells = listOf(
-                LocalDate.ofEpochDay(t.date).format(DATE),
+                epochDate(t.date).isoString(),
                 type,
                 num(t.amount),
                 c.accCur(t.acc),
@@ -86,7 +84,7 @@ object Csv {
         rows.forEach { o ->
             val cells = listOf(
                 o.no,
-                LocalDate.ofEpochDay(o.date).format(DATE),
+                epochDate(o.date).isoString(),
                 c.customerName(o.customerId),
                 l.t(OrderStatus.key(o.status)),
                 c.orderCur(o),
@@ -109,7 +107,7 @@ object Csv {
         val cat = d.categories.firstOrNull { !it.income }?.name ?: l.t("demo.cat.food")
         val inc = d.categories.firstOrNull { it.income }?.name ?: l.t("demo.cat.salary")
         val cur = d.accounts.firstOrNull()?.cur ?: d.settings.mainCur
-        val today = LocalDate.now().format(DATE)
+        val today = today().isoString()
         val sb = StringBuilder("﻿")
         sb.append(COLUMNS.joinToString(";")).append('\n')
         sb.append(listOf(today, "expense", "-1200", cur, acc, "", "", cat, l.t("demo.tx.grocery1")).joinToString(";") { esc(it) }).append('\n')
@@ -147,11 +145,11 @@ object Csv {
     fun parseDate(s: String): Long? {
         val v = s.trim()
         if (v.isEmpty()) return null
-        runCatching { return LocalDate.parse(v, DATE).toEpochDay() }
+        parseIsoDate(v)?.let { return it.toEpochDay() }
         // 14.09.2026 и 14/09/2026
         val parts = v.split('.', '/', '-').mapNotNull { it.trim().toIntOrNull() }
         if (parts.size == 3 && parts[0] <= 31) {
-            runCatching { return LocalDate.of(parts[2], parts[1], parts[0]).toEpochDay() }
+            localDateOrNull(parts[2], parts[1], parts[0])?.let { return it.toEpochDay() }
         }
         return null
     }

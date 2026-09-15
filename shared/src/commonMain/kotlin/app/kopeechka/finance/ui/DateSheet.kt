@@ -25,7 +25,15 @@ import app.kopeechka.finance.AppViewModel
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Csv
 import app.kopeechka.finance.ui.theme.T
-import java.time.LocalDate
+import app.kopeechka.finance.data.epochDate
+import app.kopeechka.finance.data.lengthOfMonth
+import app.kopeechka.finance.data.minusMonths
+import app.kopeechka.finance.data.monthValue
+import app.kopeechka.finance.data.plusDays
+import app.kopeechka.finance.data.plusMonths
+import app.kopeechka.finance.data.toEpochDay
+import app.kopeechka.finance.data.withDayOfMonth
+import app.kopeechka.finance.data.dayOfWeekValue
 
 /**
  * Выбор даты: месяц-сетка в духе остального приложения плюс поле для ручного ввода.
@@ -35,7 +43,7 @@ import java.time.LocalDate
 fun DateSheet(vm: AppViewModel, c: Calc, selected: Long) {
     val col = T.c
     val l = T.l
-    val picked = LocalDate.ofEpochDay(selected)
+    val picked = epochDate(selected)
     var shown by remember { mutableStateOf(picked.withDayOfMonth(1)) }
     var typed by remember { mutableStateOf("") }
     val today = c.today
@@ -45,7 +53,7 @@ fun DateSheet(vm: AppViewModel, c: Calc, selected: Long) {
 
         // месяц и стрелки
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconSquare(Icons.Back, { shown = shown.minusMonths(1) }, l.t("report.prev"))
+            IconSquare(Icons.Back, { shown = shown.minusMonths(1L) }, l.t("report.prev"))
             Text(
                 (l.months[shown.monthValue - 1] + " " + shown.year).uppercase(),
                 style = T.h(15.sp, col.text, 0.08.em),
@@ -53,7 +61,7 @@ fun DateSheet(vm: AppViewModel, c: Calc, selected: Long) {
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
-            IconSquare(Icons.Forward, { shown = shown.plusMonths(1) }, l.t("report.next"))
+            IconSquare(Icons.Forward, { shown = shown.plusMonths(1L) }, l.t("report.next"))
         }
 
         // шапка недели
@@ -71,7 +79,7 @@ fun DateSheet(vm: AppViewModel, c: Calc, selected: Long) {
 
         // сетка дней: пустые клетки до первого числа, дальше числа месяца
         val first = shown.withDayOfMonth(1)
-        val lead = first.dayOfWeek.value - 1
+        val lead = first.dayOfWeekValue - 1
         val len = shown.lengthOfMonth()
         val cells = List(lead) { null } + (1..len).map { it }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

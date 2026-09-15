@@ -1,0 +1,36 @@
+# Xcode-проект собирается из этого файла утилитой XcodeGen: хранить .xcodeproj
+# в репозитории неудобно — он плохо читается и конфликтует при слиянии.
+name: Kopeechka
+options:
+  bundleIdPrefix: app.kopeechka
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+targets:
+  Kopeechka:
+    type: application
+    platform: iOS
+    sources:
+      - path: Kopeechka
+    info:
+      path: Kopeechka/Info.plist
+      properties:
+        CFBundleDisplayName: Копеечка
+        CFBundleShortVersionString: "1.6"
+        CFBundleVersion: "7"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.kopeechka.finance
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(PLATFORM_NAME)
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -framework
+          - Shared

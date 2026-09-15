@@ -1,6 +1,5 @@
 package app.kopeechka.finance.data
 
-import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -69,7 +68,7 @@ class Lang(val code: String, private val map: Map<String, String>, private val f
             else -> fromSystem()
         }
 
-        fun fromSystem(): Lang = when (Locale.getDefault().language) {
+        fun fromSystem(): Lang = when (systemLanguage()) {
             "en" -> EN
             "tk" -> TK
             else -> RU

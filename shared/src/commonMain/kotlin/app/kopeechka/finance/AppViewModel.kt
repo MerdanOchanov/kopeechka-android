@@ -1,13 +1,9 @@
 package app.kopeechka.finance
 
-import android.app.Application
-import android.content.Intent
-import android.content.IntentSender
-import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.kopeechka.finance.data.Account
 import app.kopeechka.finance.data.AppData
@@ -32,6 +28,7 @@ import app.kopeechka.finance.data.debtLeft
 import app.kopeechka.finance.data.splitPayment
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
+import app.kopeechka.finance.data.decimalString
 import app.kopeechka.finance.data.Goal
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.Order
@@ -50,18 +47,20 @@ import app.kopeechka.finance.data.orderTotal
 import app.kopeechka.finance.data.product
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.AiError
-import app.kopeechka.finance.net.DriveBackup
+import app.kopeechka.finance.net.DriveApi
 import app.kopeechka.finance.net.DriveError
 import app.kopeechka.finance.net.RemoteBackup
-import app.kopeechka.finance.work.Schedules
-import com.google.android.gms.common.api.ApiException
+import app.kopeechka.finance.net.formatBackupTime
+import kotlinx.datetime.toLocalDateTime
+import app.kopeechka.finance.net.backupMillis
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.io.File
-import java.time.LocalDate
+import app.kopeechka.finance.data.today
+import app.kopeechka.finance.data.toEpochDay
+import app.kopeechka.finance.data.isoString
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -85,7 +84,7 @@ data class Draft(
     val from: String = "",
     val to: String = "",
     val note: String = "",
-    val date: Long = LocalDate.now().toEpochDay(),
+    val date: Long = today().toEpochDay(),
     // ——— долг ———
     /** DebtKind.LENT — дал в долг, DebtKind.BORROWED — взял. */
     val debtKind: String = DebtKind.LENT,
@@ -161,7 +160,7 @@ data class OrderDraft(
     val customerId: String = "",
     /** Имя клиента, которого заводим прямо в заказе. */
     val newCustomer: String = "",
-    val date: Long = LocalDate.now().toEpochDay(),
+    val date: Long = today().toEpochDay(),
     val items: List<ItemDraft> = emptyList(),
     val discount: String = "",
     val extraCost: String = "",
@@ -178,10 +177,11 @@ data class PaySheet(val orderId: Long, val acc: String, val writeCost: Boolean =
 /** Возврат по долгу: сколько и на какой счёт (или с какого). */
 data class RepaySheet(val debtId: Long, val amount: String, val acc: String)
 
-class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val host = app as KopeechkaApp
-    private val store = host.store
-    private val secure = host.secure
+class AppViewModel(
+    private val store: Storage,
+    private val secure: SecretStore,
+    private val platform: Platform,
+) : ViewModel() {
     val data: StateFlow<AppData> = store.data
 
     var tab by mutableStateOf(Tab.HOME)
@@ -205,7 +205,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "order" -> orderDraft?.date
         "due" -> draft?.due ?: draft?.date?.plus(30)
         else -> draft?.date
-    } ?: LocalDate.now().toEpochDay()
+    } ?: today().toEpochDay()
 
     fun pickDate(day: Long) {
         when (datePick) {
@@ -273,20 +273,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var driveBusy by mutableStateOf(false)
     var driveList by mutableStateOf<List<RemoteBackup>>(emptyList())
-    val authRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
-    private var pendingDrive: (suspend (String) -> Unit)? = null
 
     val calc: Calc get() = Calc(store.current)
 
+    /** Версия сборки — для строки «о программе». */
+    val version: String get() = platform.version
+
     /** Язык интерфейса: из настроек либо системный. */
     val l: Lang get() = Lang.of(store.current.settings.lang)
-    private val ctx get() = getApplication<Application>()
 
     init {
         val s = store.current.settings
-        DriveBackup.folderName = l.t("backup.folder")
-        Schedules.syncReminder(ctx, s.remind, s.remindHour)
-        Schedules.syncAutoBackup(ctx, s.autoBackup && s.driveLinked)
+        platform.onLanguageChanged(l)
+        platform.syncReminder(s.remind, s.remindHour)
+        platform.syncAutoBackup(s.autoBackup && s.driveLinked)
     }
 
     // ——— общее ———
@@ -357,7 +357,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun finishOnboarding() {
         val cur = onbCurrency()
         val keep = store.current.settings
-        val demo = Demo.create(l, cur, LocalDate.now(), onbBusiness)
+        val demo = Demo.create(l, cur, today(), onbBusiness)
         store.replace(
             demo.copy(
                 settings = keep.copy(
@@ -387,8 +387,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settings { it.copy(lang = code) }
         val nl = l
         Currencies.setLang(nl)
-        DriveBackup.folderName = nl.t("backup.folder")
-        Schedules.ensureChannel(ctx, nl)
+        platform.onLanguageChanged(nl)
         flash(nl.t("set.lang") + ": " + Lang.title(code))
     }
 
@@ -857,18 +856,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setRemind(on: Boolean) {
         settings { it.copy(remind = on) }
-        Schedules.syncReminder(ctx, on, store.current.settings.remindHour)
+        platform.syncReminder(on, store.current.settings.remindHour)
         if (on) say("msg.remindSet", store.current.settings.remindHour)
     }
 
     fun setRemindHour(h: Int) {
         settings { it.copy(remindHour = h) }
-        Schedules.syncReminder(ctx, store.current.settings.remind, h)
+        platform.syncReminder(store.current.settings.remind, h)
     }
 
     fun setAutoBackup(on: Boolean) {
         settings { it.copy(autoBackup = on) }
-        Schedules.syncAutoBackup(ctx, on && store.current.settings.driveLinked)
+        platform.syncAutoBackup(on && store.current.settings.driveLinked)
     }
 
     fun askLoadDemo() {
@@ -899,12 +898,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ——— CSV ———
 
-    /** Запрос к системе: "create" — выбрать, куда сохранить, "open" — что открыть. */
-    val fileRequests = MutableSharedFlow<FileRequest>(extraBufferCapacity = 1)
     var csvExportSheet by mutableStateOf(false)
     var csvPreview by mutableStateOf<Csv.Preview?>(null)
-    private var pendingFileKind = ""
-    private var pendingExportRange: Pair<Long, Long>? = null
 
     fun askExportCsv() {
         csvExportSheet = true
@@ -913,57 +908,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** scope: WEEK / MONTH / QUARTER / YEAR из [Period] либо "all". */
     fun exportCsv(scope: String) {
         csvExportSheet = false
-        pendingExportRange = if (scope == "all") null else {
-            val r = calc.range(Period.valueOf(scope), 0)
-            r.from to r.to
+        val r = if (scope == "all") null else calc.range(Period.valueOf(scope), 0).let { it.from to it.to }
+        val d = store.current
+        val count = d.txs.count { t -> r == null || (t.date >= r.first && t.date <= r.second) }
+        saveFile("kopeechka-${today().isoString()}.csv", Csv.export(d, r?.first, r?.second)) { name ->
+            say("csv.exported", l.n(count, "op"), name)
         }
-        pendingFileKind = "export"
-        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-${LocalDate.now()}.csv")) }
     }
 
     fun saveTemplate() {
-        pendingFileKind = "template"
-        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-template.csv")) }
+        saveFile("kopeechka-template.csv", Csv.template(store.current, l)) { name ->
+            say("csv.templateSaved", name)
+        }
     }
 
     fun askImportCsv() {
-        pendingFileKind = "import"
-        viewModelScope.launch { fileRequests.emit(FileRequest("open", "")) }
+        viewModelScope.launch {
+            val picked = try {
+                platform.openTextFile()
+            } catch (e: Exception) {
+                return@launch say("csv.fileError")
+            } ?: return@launch
+            val p = Csv.parse(picked.text, store.current, l)
+            if (p.rows.isEmpty() && p.errors.isEmpty()) say("csv.nothing") else csvPreview = p
+        }
     }
 
-    /** Пользователь выбрал файл: пишем выгрузку или читаем загрузку. */
-    fun onFileChosen(uri: Uri) {
-        val resolver = ctx.contentResolver
-        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "CSV"
-        try {
-            when (pendingFileKind) {
-                "export" -> {
-                    val r = pendingExportRange
-                    val d = store.current
-                    val count = d.txs.count { t -> r == null || (t.date >= r.first && t.date <= r.second) }
-                    resolver.openOutputStream(uri)?.use { it.write(Csv.export(d, r?.first, r?.second).toByteArray(Charsets.UTF_8)) }
-                    say("csv.exported", l.n(count, "op"), name)
-                }
-                "orders" -> {
-                    val r = pendingExportRange
-                    val count = store.current.orders.count { o -> r == null || (o.date >= r.first && o.date <= r.second) }
-                    resolver.openOutputStream(uri)?.use { it.write(Csv.exportOrders(store.current, l, r?.first, r?.second).toByteArray(Charsets.UTF_8)) }
-                    say("csv.exported", l.n(count, "order"), name)
-                }
-                "template" -> {
-                    resolver.openOutputStream(uri)?.use { it.write(Csv.template(store.current, l).toByteArray(Charsets.UTF_8)) }
-                    say("csv.templateSaved", name)
-                }
-                "import" -> {
-                    val text = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                    val p = Csv.parse(text, store.current, l)
-                    if (p.rows.isEmpty() && p.errors.isEmpty()) say("csv.nothing") else csvPreview = p
-                }
+    /** Сохранение через системный диалог: платформа сама спросит, куда положить файл. */
+    private fun saveFile(name: String, text: String, done: (String) -> Unit) {
+        viewModelScope.launch {
+            val saved = try {
+                platform.saveTextFile(name, text)
+            } catch (e: Exception) {
+                return@launch say("csv.fileError")
             }
-        } catch (e: Exception) {
-            say("csv.fileError")
+            if (saved != null) done(saved)
         }
-        pendingFileKind = ""
     }
 
     fun applyImport() {
@@ -1132,7 +1112,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Число обратно в поле: целое — без хвоста, дробное — с разделителем языка. */
     private fun numText(v: Double): String {
         if (v == v.roundToLong().toDouble()) return v.roundToLong().toString()
-        val s = java.math.BigDecimal(v).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+        val s = decimalString(v, 2)
         return if (l.code == "en") s else s.replace('.', ',')
     }
 
@@ -1151,7 +1131,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun loadBizDemo() {
         val d = store.current
         val acc = d.accounts.firstOrNull()?.id ?: return say("msg.noAccount")
-        val biz = Demo.bizData(l, d.settings.mainCur, LocalDate.now(), acc)
+        val biz = Demo.bizData(l, d.settings.mainCur, today(), acc)
         store.update { s ->
             s.copy(
                 categories = withBizCats(s),
@@ -1470,9 +1450,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun exportOrders() {
-        pendingFileKind = "orders"
-        pendingExportRange = calc.range(bizPeriod, bizOffset).let { it.from to it.to }
-        viewModelScope.launch { fileRequests.emit(FileRequest("create", "kopeechka-orders-${LocalDate.now()}.csv")) }
+        val r = calc.range(bizPeriod, bizOffset)
+        val count = store.current.orders.count { o -> o.date >= r.from && o.date <= r.to }
+        saveFile("kopeechka-orders-${today().isoString()}.csv", Csv.exportOrders(store.current, l, r.from, r.to)) { name ->
+            say("csv.exported", l.n(count, "order"), name)
+        }
+    }
+
+    /** «2026-09-15_10-45-03» в имени файла копии. */
+    private fun backupFileStamp(): String {
+        val now = kotlinx.datetime.Clock.System.now()
+            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+        fun two(v: Int) = v.toString().padStart(2, '0')
+        return "${now.year}-${two(now.monthNumber)}-${two(now.dayOfMonth)}_" +
+            "${two(now.hour)}-${two(now.minute)}-${two(now.second)}"
     }
 
     // ——— ИИ-советник ———
@@ -1618,18 +1609,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         driveBusy = true
         viewModelScope.launch {
             try {
-                val r = DriveBackup.authorize(ctx)
-                val token = r.accessToken
-                if (r.hasResolution()) {
-                    pendingDrive = action
-                    authRequests.emit(r.pendingIntent!!.intentSender)
+                val token = platform.driveToken()
+                if (token == null) {
+                    driveBusy = false
                     return@launch
                 }
-                if (token == null) throw IllegalStateException(l.t("msg.noToken"))
                 runDrive(token, action)
-            } catch (e: ApiException) {
+            } catch (e: DriveAuthError) {
                 driveBusy = false
-                say("msg.driveAuthError", e.statusCode)
+                say("msg.driveAuthError", e.code)
             } catch (e: DriveError) {
                 driveBusy = false
                 say("msg.driveError", e.text(l))
@@ -1640,32 +1628,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun onAuthResult(data: Intent?) {
-        val action = pendingDrive
-        pendingDrive = null
-        viewModelScope.launch {
-            try {
-                val token = DriveBackup.resultFromIntent(ctx, data).accessToken
-                if (action != null && token != null) runDrive(token, action) else driveBusy = false
-            } catch (e: ApiException) {
-                driveBusy = false
-                say("msg.driveDenied")
-            }
-        }
-    }
-
-    fun onAuthCancelled() {
-        pendingDrive = null
-        driveBusy = false
-        say("msg.driveCancelled")
-    }
-
     private suspend fun runDrive(token: String, action: suspend (String) -> Unit) {
         try {
             action(token)
             if (!store.current.settings.driveLinked) {
                 settings { it.copy(driveLinked = true) }
-                Schedules.syncAutoBackup(ctx, store.current.settings.autoBackup)
+                platform.syncAutoBackup(store.current.settings.autoBackup)
             }
         } catch (e: DriveError) {
             say("msg.driveError", e.text(l))
@@ -1677,24 +1645,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun backupNow() = driveAction { t ->
-        val name = DriveBackup.upload(t, store.exportJson())
-        DriveBackup.prune(t, 10)
-        settings { it.copy(lastBackupAt = System.currentTimeMillis()) }
-        driveList = DriveBackup.list(t)
+        val name = DriveApi.upload(t, store.exportJson(), "kopeechka-" + backupFileStamp() + ".json")
+        DriveApi.prune(t, 10)
+        settings { it.copy(lastBackupAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()) }
+        driveList = DriveApi.list(t)
         say("msg.backupSaved", name)
     }
 
-    fun refreshBackups() = driveAction { t -> driveList = DriveBackup.list(t) }
+    fun refreshBackups() = driveAction { t -> driveList = DriveApi.list(t) }
 
     fun askRestore(b: RemoteBackup) {
         confirm = Confirm(
             l.t("msg.restoreTitle"),
-            l.t("msg.restoreText", DriveBackup.formatTime(b.created, l)),
+            l.t("msg.restoreText", formatBackupTime(backupMillis(b), l)),
             l.t("common.restore"),
         ) {
             driveAction { t ->
-                val restored = store.parseBackup(DriveBackup.download(t, b.id))
-                File(ctx.filesDir, "before-restore.json").writeText(store.exportJson())
+                val restored = store.parseBackup(DriveApi.download(t, b.id))
+                platform.saveBeforeRestore(store.exportJson())
                 val keep = store.current.settings
                 store.replace(
                     restored.copy(
@@ -1713,7 +1681,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unlinkDrive() {
         settings { it.copy(driveLinked = false, autoBackup = false) }
-        Schedules.syncAutoBackup(ctx, false)
+        platform.syncAutoBackup(false)
         driveList = emptyList()
         say("msg.driveUnlinked")
     }

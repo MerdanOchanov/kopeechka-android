@@ -56,13 +56,10 @@ kotlin {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
-    implementation(composeBom)
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation(project(":shared"))
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+
+    // Compose приходит из :shared (Compose Multiplatform), отдельный BOM больше не нужен
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
@@ -77,9 +74,5 @@ dependencies {
     // Google Sign-In / авторизация для резервных копий в Google Диске
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
-    // HTTP: Google Drive REST, OpenAI / Gemini / свой endpoint
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // Официальный SDK Anthropic для запросов к Claude
-    implementation("com.anthropic:anthropic-java:2.34.0")
+    // HTTP для Диска и ИИ-советника живёт в :shared на Ktor
 }

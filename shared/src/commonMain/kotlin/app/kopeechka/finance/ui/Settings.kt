@@ -30,17 +30,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.kopeechka.finance.AppViewModel
-import app.kopeechka.finance.BuildConfig
 import app.kopeechka.finance.CurSheet
 import app.kopeechka.finance.Page
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.decimalString
 import app.kopeechka.finance.data.debtStats
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.net.Ai
-import app.kopeechka.finance.net.DriveBackup
+import app.kopeechka.finance.net.backupMillis
+import app.kopeechka.finance.net.formatBackupTime
 import app.kopeechka.finance.ui.theme.T
-import java.time.Instant
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -105,7 +105,7 @@ fun fmtRate(v: Double): String {
         abs(v) >= 0.01 -> 5
         else -> 8
     }
-    val s = java.math.BigDecimal(v).setScale(scale, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+    val s = decimalString(v, scale)
     return if (Currencies.lang.code == "en") s else s.replace('.', ',')
 }
 
@@ -132,7 +132,7 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                 l.t("set.backup"),
                 when {
                     !s.driveLinked -> l.t("backup.driveNotLinked")
-                    s.lastBackupAt > 0 -> l.t("backup.drive") + " · " + DriveBackup.formatTime(Instant.ofEpochMilli(s.lastBackupAt), l)
+                    s.lastBackupAt > 0 -> l.t("backup.drive") + " · " + formatBackupTime(s.lastBackupAt, l)
                     else -> l.t("backup.driveLinked")
                 },
             ) { vm.openPage(Page.BACKUP) }
@@ -258,7 +258,7 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             SectionTitle(l.t("set.data"))
             SecondaryButton(l.t("set.loadDemo"), { vm.askLoadDemo() }, Modifier.fillMaxWidth(), size = 13, upper = true)
             DangerButton(l.t("set.clearAll"), { vm.askClearAll() })
-            Muted(l.t("set.about", BuildConfig.VERSION_NAME), 10.5f)
+            Muted(l.t("set.about", vm.version), 10.5f)
         }
     }
 }
@@ -469,7 +469,7 @@ fun BackupPage(vm: AppViewModel, c: Calc) {
             Text(if (s.driveLinked) l.t("backup.linked") else l.t("backup.notLinked"), style = T.h(22.sp, col.text))
             Spacer(Modifier.height(2.dp))
             Text(
-                if (s.lastBackupAt > 0) l.t("backup.last", DriveBackup.formatTime(Instant.ofEpochMilli(s.lastBackupAt), l)) else l.t("backup.never"),
+                if (s.lastBackupAt > 0) l.t("backup.last", formatBackupTime(s.lastBackupAt, l)) else l.t("backup.never"),
                 style = T.b(11.5.sp, col.n700),
             )
         }
@@ -490,7 +490,7 @@ fun BackupPage(vm: AppViewModel, c: Calc) {
         if (vm.driveList.isEmpty()) Muted(if (s.driveLinked) l.t("backup.listEmpty") else l.t("backup.listNotLinked"), 12f)
         Column {
             vm.driveList.forEach { b ->
-                SettingRow(DriveBackup.formatTime(b.created, l), "${b.name} · ${max(1L, b.size / 1024)} KB") {
+                SettingRow(formatBackupTime(backupMillis(b), l), "${b.name} · ${max(1L, b.size / 1024)} KB") {
                     SecondaryButton(l.t("common.restore"), { vm.askRestore(b) })
                 }
             }

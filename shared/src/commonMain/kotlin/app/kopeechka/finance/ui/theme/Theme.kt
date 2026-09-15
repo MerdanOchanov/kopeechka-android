@@ -1,22 +1,15 @@
 package app.kopeechka.finance.ui.theme
 
-import android.content.Context
-import android.graphics.Typeface
-import android.graphics.fonts.FontStyle
-import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import app.kopeechka.finance.R
 
 /** Токены дизайн-системы Industry (styles.css) + тёмная тема из прототипа «Копеечки». */
 @Immutable
@@ -109,34 +102,13 @@ val DarkColors = LightColors.copy(
 val Shades = listOf(0xFF1D2D3D, 0xFF2C455D, 0xFF416180, 0xFF597EA3, 0xFF749DC4, 0xFF94BCE3, 0xFFB5D9FD).map { Color(it) }
 
 /**
- * Barlow Condensed (заголовки, цифры) и Barlow (текст). В Barlow нет кириллицы,
- * поэтому на Android 10+ русские буквы берутся из системного sans-serif-condensed / sans-serif,
- * а не из обычного Roboto — заголовки остаются узкими.
+ * Barlow Condensed (заголовки, цифры) и Barlow (текст). Шрифты подставляет платформа:
+ * на Android — с системным запасным семейством для кириллицы, которой в Barlow нет,
+ * на iOS — из ресурсов. До инициализации используется системный шрифт.
  */
 object KopeechkaFonts {
     var heading: FontFamily = FontFamily.SansSerif
-        private set
     var body: FontFamily = FontFamily.SansSerif
-        private set
-
-    fun init(ctx: Context) {
-        heading = build(ctx, R.font.barlow_condensed_semibold, 600, "sans-serif-condensed")
-        body = build(ctx, R.font.barlow_regular, 400, "sans-serif")
-    }
-
-    private fun build(ctx: Context, res: Int, weight: Int, fallback: String): FontFamily = runCatching {
-        if (Build.VERSION.SDK_INT >= 29) {
-            val font = android.graphics.fonts.Font.Builder(ctx.resources, res).setWeight(weight).build()
-            val family = android.graphics.fonts.FontFamily.Builder(font).build()
-            val tf = Typeface.CustomFallbackBuilder(family)
-                .setSystemFallback(fallback)
-                .setStyle(FontStyle(weight, FontStyle.FONT_SLANT_UPRIGHT))
-                .build()
-            FontFamily(tf)
-        } else {
-            FontFamily(Font(res, FontWeight(weight)))
-        }
-    }.getOrDefault(FontFamily.SansSerif)
 }
 
 val LocalColors = staticCompositionLocalOf { LightColors }

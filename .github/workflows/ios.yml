@@ -1,0 +1,95 @@
+name: iOS
+
+# Собрать приложение для симулятора, запустить его и снять экран.
+# Нужен macOS: Kotlin/Native для Apple и Xcode работают только там.
+on:
+  push:
+    branches: [kmp, main]
+    paths:
+      - 'shared/**'
+      - 'iosApp/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Кэш Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Общий код без привязки к платформе
+        run: |
+          chmod +x gradlew
+          ./gradlew :shared:compileCommonMainKotlinMetadata --no-daemon
+
+      - name: Framework для симулятора
+        run: ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 --no-daemon
+
+      - name: Положить framework туда, где его ищет Xcode
+        run: |
+          DEST="shared/build/xcode-frameworks/Debug/iphonesimulator"
+          mkdir -p "$DEST"
+          cp -R shared/build/bin/iosSimulatorArm64/debugFramework/Shared.framework "$DEST/"
+
+      - name: Сгенерировать Xcode-проект
+        run: |
+          brew install xcodegen
+          cd iosApp && xcodegen generate
+
+      - name: Выбрать симулятор
+        run: |
+          set -eo pipefail
+          # состав симуляторов на раннерах меняется, поэтому берём первый доступный iPhone
+          LINE=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1)
+          UDID=$(echo "$LINE" | grep -oE "[0-9A-F]{8}-[0-9A-F-]{27}")
+          NAME=$(echo "$LINE" | sed -E "s/^ *//; s/ [(].*//")
+          echo "Симулятор: $NAME ($UDID)"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Собрать приложение
+        run: |
+          set -eo pipefail
+          cd iosApp
+          xcodebuild build             -project Kopeechka.xcodeproj             -scheme Kopeechka             -configuration Debug             -sdk iphonesimulator             -destination "id=$SIM_UDID"             -derivedDataPath build             CODE_SIGNING_ALLOWED=NO
+
+      - name: Запустить на симуляторе и снять экран
+        run: |
+          set -eo pipefail
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          APP=$(find iosApp/build/Build/Products -name "Kopeechka.app" -maxdepth 3 | head -1)
+          echo "Приложение: $APP"
+          xcrun simctl install "$SIM_UDID" "$APP"
+          xcrun simctl launch "$SIM_UDID" app.kopeechka.finance
+          sleep 20
+          mkdir -p artifacts
+          xcrun simctl io "$SIM_UDID" screenshot artifacts/home.png
+
+      - name: Забрать скриншоты
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots
+          path: artifacts/
+          if-no-files-found: warn
+
+      - name: Забрать логи симулятора при неудаче
+        if: failure()
+        run: xcrun simctl spawn booted log collect --output artifacts/sim-logs || true
