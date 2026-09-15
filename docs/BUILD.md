@@ -20,6 +20,24 @@ sdk.dir=C\:\\Users\\<имя>\\AppData\\Local\\Android\\Sdk
 sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 ```
 
+## Общий код и iOS
+
+Ядро, сеть и часть интерфейса лежат в модуле `:shared` (Kotlin Multiplatform,
+Compose Multiplatform). Android собирается как обычно, а вот проверить, что общий
+код действительно не зацепил платформенных API, можно и на Windows:
+
+```bash
+gradlew.bat :shared:compileCommonMainKotlinMetadata
+```
+
+Эта сборка компилирует `commonMain` без привязки к платформе и падает на всём,
+что доступно только на JVM (например, на `@Volatile` из `kotlin.jvm` — в общем
+коде нужен `kotlin.concurrent.Volatile`). Android-сборка такие места пропускает,
+поэтому запускать её стоит после каждой правки общего кода.
+
+Цели `iosX64`, `iosArm64` и `iosSimulatorArm64` объявлены, но компилируются
+только на macOS с Xcode.
+
 ## Сборка
 
 ```bash

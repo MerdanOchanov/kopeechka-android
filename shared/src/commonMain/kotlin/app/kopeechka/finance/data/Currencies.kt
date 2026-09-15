@@ -8,7 +8,7 @@ object Currencies {
      * Язык названий и формата чисел. Ставится из Store при загрузке и каждом изменении
      * настроек, чтобы `info(...)` и `fmt(...)` можно было звать без лишних параметров.
      */
-    @Volatile
+    @kotlin.concurrent.Volatile
     var lang: Lang = Lang.RU
         private set
 
@@ -149,7 +149,7 @@ object Currencies {
     private val byCode = CATALOG.associateBy { it.code }
 
     /** Валюты, которые пользователь завёл вручную (их нет в каталоге). */
-    @Volatile
+    @kotlin.concurrent.Volatile
     private var custom: Map<String, Info> = emptyMap()
 
     fun registerCustom(defs: List<CurrencyDef>) {

@@ -3,7 +3,7 @@ package app.kopeechka.finance
 import android.app.Application
 import app.kopeechka.finance.data.SecureStore
 import app.kopeechka.finance.data.Store
-import app.kopeechka.finance.ui.theme.KopeechkaFonts
+import app.kopeechka.finance.ui.theme.initAndroidFonts
 import app.kopeechka.finance.work.Schedules
 
 class KopeechkaApp : Application() {
@@ -16,7 +16,7 @@ class KopeechkaApp : Application() {
         super.onCreate()
         store = Store(this)
         secure = SecureStore(this)
-        KopeechkaFonts.init(this)
+        initAndroidFonts(this, R.font.barlow_condensed_semibold, R.font.barlow_regular)
         Schedules.ensureChannel(this)
     }
 }
