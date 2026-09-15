@@ -30,6 +30,11 @@ Kotlin · Jetpack Compose · minSdk 26 (Android 8.0) · без аналитик�
   (неизвестные счета и категории создаются сами).
 - Цели и накопления: «отложить» списывает сумму со счёта и двигает прогресс цели.
 
+**Долги**
+- Дать или взять в долг — прямо на экране новой операции: кому, сколько, когда вернуть и сколько вернётся.
+- Тело долга меняет остаток счёта, но не попадает в расходы и бюджеты; заработок сверх тела — настоящий доход.
+- Возвраты по частям, просрочка красным, ставка в процентах — см. [docs/DEBTS.md](docs/DEBTS.md).
+
 **Бизнес (по желанию)**
 - Заказы, клиенты и прайс — включается на заставке или в настройках, выключенный модуль не виден.
 - Оплата заказа создаёт обычную операцию дохода, поэтому выручка сразу в балансе и в отчётах.
@@ -75,6 +80,7 @@ Kotlin · Jetpack Compose · minSdk 26 (Android 8.0) · без аналитик�
 | [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md) | настройка Диска для себя и для распространения |
 | [docs/AI_ADVISOR.md](docs/AI_ADVISOR.md) | провайдеры, ключи, что именно уходит в запрос |
 | [docs/BUSINESS.md](docs/BUSINESS.md) | заказы, клиенты, прайс: как считаются выручка и прибыль |
+| [docs/DEBTS.md](docs/DEBTS.md) | долги: почему тело долга не расход и как считается заработок |
 | [CHANGELOG.md](CHANGELOG.md) | что менялось |
 
 ## Быстрый старт
@@ -95,11 +101,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 app/src/main/java/app/kopeechka/finance/
   data/   Model.kt · Store.kt (JSON) · Calc.kt (балансы, бюджеты, отчёты)
-          Business.kt (заказы, клиенты, прайс) · Currencies.kt (каталог валют)
+          Business.kt (заказы, клиенты, прайс) · Debts.kt (долги)
+          Currencies.kt (каталог валют)
           Palette.kt · Demo.kt · SecureStore.kt
   net/    Ai.kt (Claude SDK, OpenAI, Gemini, свой endpoint) · DriveBackup.kt (Drive REST v3)
   work/   Workers.kt (ежедневная копия, вечернее напоминание)
-  ui/     Root.kt · Screens.kt · Settings.kt · Overlays.kt · Business.kt
+  ui/     Root.kt · Screens.kt · Settings.kt · Overlays.kt · Business.kt · Debts.kt
+          DateSheet.kt (календарь)
           Components.kt · Icons.kt
           theme/Theme.kt (токены Industry, шрифты Barlow)
   AppViewModel.kt · MainActivity.kt · KopeechkaApp.kt

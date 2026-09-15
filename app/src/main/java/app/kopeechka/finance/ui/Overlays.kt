@@ -45,6 +45,7 @@ import app.kopeechka.finance.data.AppData
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Csv
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.DebtKind
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
@@ -92,6 +93,7 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
         ) {
             Text(
                 when {
+                    d.kind == Kind.DEBT -> l.t("debt.newOp")
                     isT -> l.t("add.transfer")
                     d.editId != null -> l.t("add.one")
                     else -> l.t("add.new")
@@ -122,6 +124,7 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
             ) {
                 Text(
                     when (d.kind) {
+                        Kind.DEBT -> l.t(DebtKind.key(d.debtKind)).lowercase()
                         Kind.TRANSFER -> l.t("add.transferLower")
                         Kind.INCOME -> l.t("add.incomeLower")
                         Kind.EXPENSE -> l.t("add.expenseLower")
@@ -173,6 +176,8 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
                 }
             }
 
+            if (d.kind == Kind.DEBT) DebtFields(vm, c, d)
+
             if (isT) {
                 Lane(l.t("add.toAcc")) {
                     c.d.accounts.forEach { a ->
@@ -217,7 +222,11 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
                 null,
                 d.note,
                 { vm.draft = d.copy(note = it) },
-                placeholder = if (isT) l.t("add.noteTransferHint") else l.t("add.noteHint"),
+                placeholder = when {
+                    d.kind == Kind.DEBT -> l.t("debt.noteHint")
+                    isT -> l.t("add.noteTransferHint")
+                    else -> l.t("add.noteHint")
+                },
             )
 
             Keypad(Modifier.weight(1f), fill = true) { vm.press(it) }
@@ -230,7 +239,11 @@ fun AddOverlay(vm: AppViewModel, c: Calc, d: Draft) {
         ) {
             if (d.editId != null) DangerButton(l.t("common.delete"), { vm.askDeleteTx(d.editId) }, Modifier.weight(0.45f))
             PrimaryButton(
-                if (isT) l.t("add.saveTransfer") else l.t("common.save"),
+                when {
+                    d.kind == Kind.DEBT -> l.t(if (d.debtKind == DebtKind.LENT) "debt.saveLent" else "debt.saveBorrowed")
+                    isT -> l.t("add.saveTransfer")
+                    else -> l.t("common.save")
+                },
                 { vm.saveDraft() },
                 Modifier.weight(1f),
                 enabled = d.amount.isNotEmpty(),

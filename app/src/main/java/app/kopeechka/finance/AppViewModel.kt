@@ -20,7 +20,16 @@ import app.kopeechka.finance.data.Category
 import app.kopeechka.finance.data.Csv
 import app.kopeechka.finance.data.CurrencyDef
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.CAT_DEBT
+import app.kopeechka.finance.data.CAT_DEBT_COST
+import app.kopeechka.finance.data.CAT_DEBT_GAIN
 import app.kopeechka.finance.data.Customer
+import app.kopeechka.finance.data.Debt
+import app.kopeechka.finance.data.DebtKind
+import app.kopeechka.finance.data.DebtPayment
+import app.kopeechka.finance.data.debtCur
+import app.kopeechka.finance.data.debtLeft
+import app.kopeechka.finance.data.splitPayment
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.Goal
@@ -59,8 +68,13 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 enum class Tab { HOME, OPS, BUDGET, REPORT, SETTINGS }
-enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS }
-enum class Kind(val key: String) { EXPENSE("kind.expense"), INCOME("kind.income"), TRANSFER("kind.transfer") }
+enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS }
+enum class Kind(val key: String) {
+    EXPENSE("kind.expense"),
+    INCOME("kind.income"),
+    TRANSFER("kind.transfer"),
+    DEBT("kind.debt"),
+}
 
 data class Draft(
     val editId: Long? = null,
@@ -72,6 +86,14 @@ data class Draft(
     val to: String = "",
     val note: String = "",
     val date: Long = LocalDate.now().toEpochDay(),
+    // ——— долг ———
+    /** DebtKind.LENT — дал в долг, DebtKind.BORROWED — взял. */
+    val debtKind: String = DebtKind.LENT,
+    val party: String = "",
+    /** Когда вернуть; null — без срока. */
+    val due: Long? = null,
+    /** Сколько должно вернуться всего; пусто — столько же, сколько дали. */
+    val expected: String = "",
 )
 
 sealed interface CurSheet {
@@ -153,6 +175,9 @@ data class OrderDraft(
 /** Приём оплаты: на какой счёт и списывать ли себестоимость. */
 data class PaySheet(val orderId: Long, val acc: String, val writeCost: Boolean = false)
 
+/** Возврат по долгу: сколько и на какой счёт (или с какого). */
+data class RepaySheet(val debtId: Long, val amount: String, val acc: String)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val host = app as KopeechkaApp
     private val store = host.store
@@ -172,22 +197,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var toast by mutableStateOf<String?>(null)
     var onbStep by mutableStateOf(0)
 
-    /** Открытый календарь: "tx" — дата операции, "order" — дата заказа. */
+    /** Открытый календарь: "tx" — дата операции, "order" — дата заказа, "due" — срок возврата. */
     var datePick by mutableStateOf<String?>(null)
 
     /** Дата, которую сейчас показывает календарь. */
     fun pickedDate(): Long = when (datePick) {
         "order" -> orderDraft?.date
+        "due" -> draft?.due ?: draft?.date?.plus(30)
         else -> draft?.date
     } ?: LocalDate.now().toEpochDay()
 
     fun pickDate(day: Long) {
         when (datePick) {
             "order" -> orderDraft = orderDraft?.copy(date = day)
+            "due" -> draft = draft?.copy(due = day)
             "tx" -> draft = draft?.copy(date = day)
         }
         datePick = null
     }
+
+    var debtCard by mutableStateOf<Long?>(null)
+    var repaySheet by mutableStateOf<RepaySheet?>(null)
 
     var orderDraft by mutableStateOf<OrderDraft?>(null)
     var productEdit by mutableStateOf<ProductEdit?>(null)
@@ -280,6 +310,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         when {
             confirm != null -> confirm = null
             datePick != null -> datePick = null
+            repaySheet != null -> repaySheet = null
+            debtCard != null -> debtCard = null
             paySheet != null -> paySheet = null
             orderDraft?.picking == true -> orderDraft = orderDraft?.copy(picking = false)
             orderDraft != null -> orderDraft = null
@@ -377,6 +409,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openEdit(t: Tx) {
+        if (t.cat == CAT_DEBT) {
+            val debt = store.current.debts.firstOrNull { it.txId == t.id || it.payments.any { p -> p.txId == t.id } }
+            if (debt != null) {
+                debtCard = debt.id
+                return
+            }
+        }
         if (t.cat == CAT_GOAL) {
             confirm = Confirm(
                 l.t("msg.goalContribution"),
@@ -430,6 +469,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (v <= 0) return say("msg.enterAmount")
         val c = calc
         val src = c.acc(d.from) ?: return say("msg.noAccount")
+        if (d.kind == Kind.DEBT) return saveDebtDraft(d, v, src)
         val id = d.editId ?: store.current.nextId
         // сколько эта же операция уже списывала со счёта — при правке её нужно вернуть
         val old = d.editId?.let { eid -> store.current.txs.firstOrNull { it.id == eid && it.acc == src.id }?.amount } ?: 0.0
@@ -441,6 +481,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val got = c.conv(v, src.cur, dst.cur)
                 Tx(id, d.date, l.t("msg.transferTitle", src.name, dst.name), CAT_TRANSFER, src.id, -v, d.note, dst.id, got)
             }
+            Kind.DEBT -> return
             Kind.INCOME -> Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.incomeCat).name }, d.incomeCat, src.id, v)
             Kind.EXPENSE -> {
                 if (!c.s.allowNegative && c.balance(src) - old < v) {
@@ -455,6 +496,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         draft = null
         when (d.kind) {
+            Kind.DEBT -> Unit
             Kind.TRANSFER -> say("msg.transferDone", c.fmt(v, src.cur), c.fmt(tx.toAmount ?: 0.0, c.accCur(tx.toAcc)))
             Kind.INCOME -> say("msg.incomeDone", c.fmt(v, src.cur), c.cat(tx.cat).name)
             Kind.EXPENSE -> if (d.editId != null) say("msg.changed", c.fmt(v, src.cur), c.cat(tx.cat).name)
@@ -476,6 +518,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (g.id == t.goal) g.copy(saved = max(0.0, g.saved - c.conv(-t.amount, c.accCur(t.acc), g.cur))) else g
                 }
             }
+            // операция могла быть частью долга — убираем её и оттуда
+            val debts = s.debts.map { dbt ->
+                when {
+                    dbt.txId == id -> dbt.copy(txId = null)
+                    dbt.payments.any { p -> p.txId == id || p.extraTxId == id } ->
+                        dbt.copy(payments = dbt.payments.filterNot { p -> p.txId == id || p.extraTxId == id })
+                    else -> dbt
+                }
+            }
             // операция могла быть создана оплатой заказа — снимаем с него отметку об оплате
             val orders = s.orders.map { o ->
                 when (id) {
@@ -484,7 +535,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     else -> o
                 }
             }
-            s.copy(txs = s.txs.filterNot { it.id == id }, goals = goals, orders = orders)
+            s.copy(txs = s.txs.filterNot { it.id == id }, goals = goals, orders = orders, debts = debts)
         }
         draft = null
         say("msg.txDeleted")
@@ -920,6 +971,152 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         store.update { Csv.apply(it, p, l) }
         csvPreview = null
         say("csv.imported", l.n(p.rows.size, "op"))
+    }
+
+    // ——— Долги ———
+
+    /** Категории заработка на долге и переплаты — создаются, когда впервые понадобятся. */
+    private fun withDebtCats(s: AppData): List<Category> =
+        s.categories + Demo.debtCategories(l).filterNot { b -> s.categories.any { it.id == b.id } }
+
+    fun openDebt(id: Long) {
+        debtCard = id
+    }
+
+    /** Создание долга с экрана новой операции. */
+    private fun saveDebtDraft(d: Draft, v: Double, src: Account) {
+        val c = calc
+        val lent = d.debtKind == DebtKind.LENT
+        if (lent && !c.s.allowNegative && c.balance(src) < v) {
+            return say("msg.notEnoughHint", src.name, c.fmt(v - c.balance(src), src.cur))
+        }
+        val party = d.party.trim().ifBlank { l.t("debt.noParty") }
+        val expected = num(d.expected).takeIf { it > 0 } ?: v
+        val title = l.t(if (lent) "debt.txLent" else "debt.txBorrowed", party)
+        store.update { s ->
+            var nextId = s.nextId
+            val txId = nextId++
+            val debtId = nextId++
+            val tx = Tx(txId, d.date, title, CAT_DEBT, src.id, if (lent) -v else v, d.note.trim())
+            val debt = Debt(
+                id = debtId,
+                kind = d.debtKind,
+                party = party,
+                principal = v,
+                expected = expected,
+                cur = src.cur,
+                date = d.date,
+                due = d.due,
+                acc = src.id,
+                txId = txId,
+                note = d.note.trim(),
+            )
+            s.copy(txs = listOf(tx) + s.txs, debts = s.debts + debt, nextId = nextId)
+        }
+        draft = null
+        say(if (lent) "debt.lentDone" else "debt.borrowedDone", c.fmt(v, src.cur), party)
+    }
+
+    /** Возврат: по умолчанию весь остаток и тот же счёт. */
+    fun openRepay(debtId: Long) {
+        val c = calc
+        val debt = store.current.debts.firstOrNull { it.id == debtId } ?: return
+        val acc = c.acc(debt.acc)?.id ?: store.current.accounts.firstOrNull()?.id ?: return say("msg.noAccount")
+        repaySheet = RepaySheet(debtId, numText(c.debtLeft(debt)), acc)
+    }
+
+    /**
+     * Платёж по долгу. Сначала закрывается тело (служебная категория, отчёты не трогает),
+     * остаток — настоящий доход по данному в долг либо расход по взятому.
+     */
+    fun confirmRepay() {
+        val rs = repaySheet ?: return
+        val c = calc
+        val debt = store.current.debts.firstOrNull { it.id == rs.debtId } ?: return
+        val acc = c.acc(rs.acc) ?: return say("msg.noAccount")
+        val amount = num(rs.amount)
+        if (amount <= 0) return say("msg.enterAmount")
+        val cur = c.debtCur(debt)
+        val lent = debt.kind == DebtKind.LENT
+        val inAcc = c.conv(amount, cur, acc.cur)
+        if (!lent && !c.s.allowNegative && c.balance(acc) < inAcc) {
+            return say("msg.notEnoughHint", acc.name, c.fmt(inAcc - c.balance(acc), acc.cur))
+        }
+        val (body, extra) = c.splitPayment(debt, amount)
+        val day = c.todayDay
+        store.update { s ->
+            var nextId = s.nextId
+            val add = mutableListOf<Tx>()
+            var bodyTxId: Long? = null
+            if (body > 0) {
+                val id = nextId++
+                bodyTxId = id
+                val sum = c.conv(body, cur, acc.cur)
+                add += Tx(id, day, l.t("debt.txBack", debt.party), CAT_DEBT, acc.id, if (lent) sum else -sum)
+            }
+            var extraTxId: Long? = null
+            if (extra > 0.005) {
+                val id = nextId++
+                extraTxId = id
+                val sum = c.conv(extra, cur, acc.cur)
+                add += Tx(
+                    id,
+                    day,
+                    l.t(if (lent) "debt.txGain" else "debt.txCost", debt.party),
+                    if (lent) CAT_DEBT_GAIN else CAT_DEBT_COST,
+                    acc.id,
+                    if (lent) sum else -sum,
+                )
+            }
+            val payment = DebtPayment(nextId++, day, amount, bodyTxId, extraTxId)
+            s.copy(
+                categories = if (extra > 0.005) withDebtCats(s) else s.categories,
+                txs = add + s.txs,
+                debts = s.debts.map { if (it.id == debt.id) it.copy(payments = it.payments + payment) else it },
+                nextId = nextId,
+            )
+        }
+        repaySheet = null
+        val after = calc
+        val left = after.d.debts.firstOrNull { it.id == debt.id }?.let { after.debtLeft(it) } ?: 0.0
+        if (left <= 0.005) {
+            debtCard = null
+            say("debt.closedDone", debt.party)
+        } else {
+            say("debt.paidPart", c.fmt(amount, cur), c.fmt(left, cur))
+        }
+    }
+
+    /** Закрыть без денег: простили, списали, договорились. */
+    fun askCloseDebt(id: Long) {
+        val c = calc
+        val debt = store.current.debts.firstOrNull { it.id == id } ?: return
+        confirm = Confirm(
+            l.t("debt.closeTitle"),
+            l.t("debt.closeText", c.fmt(c.debtLeft(debt), c.debtCur(debt))),
+            l.t("debt.closeAction"),
+        ) {
+            store.update { s -> s.copy(debts = s.debts.map { if (it.id == id) it.copy(closed = true) else it }) }
+            debtCard = null
+            say("debt.closed")
+        }
+    }
+
+    fun reopenDebt(id: Long) {
+        store.update { s -> s.copy(debts = s.debts.map { if (it.id == id) it.copy(closed = false) else it }) }
+    }
+
+    fun askDeleteDebt(id: Long) {
+        val debt = store.current.debts.firstOrNull { it.id == id } ?: return
+        confirm = Confirm(l.t("debt.deleteTitle"), l.t("debt.deleteText", debt.party), l.t("common.delete")) {
+            store.update { s ->
+                val drop = (listOf(debt.txId) + debt.payments.flatMap { listOf(it.txId, it.extraTxId) }).filterNotNull().toSet()
+                s.copy(debts = s.debts.filterNot { it.id == id }, txs = s.txs.filterNot { it.id in drop })
+            }
+            debtCard = null
+            repaySheet = null
+            say("debt.deleted")
+        }
     }
 
     // ——— «Дело»: прайс, клиенты, заказы ———

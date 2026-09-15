@@ -35,6 +35,7 @@ import app.kopeechka.finance.CurSheet
 import app.kopeechka.finance.Page
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.debtStats
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.DriveBackup
@@ -135,6 +136,12 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                     else -> l.t("backup.driveLinked")
                 },
             ) { vm.openPage(Page.BACKUP) }
+            NavRow(
+                Icons.Wallet,
+                l.t("debt.title"),
+                if (c.d.debts.isEmpty()) l.t("debt.navEmpty")
+                else l.t("debt.navSub", c.fmtMain(c.debtStats().lentLeft), c.fmtMain(c.debtStats().borrowedLeft)),
+            ) { vm.openPage(Page.DEBTS) }
             if (s.business) {
                 NavRow(
                     Icons.Rate,

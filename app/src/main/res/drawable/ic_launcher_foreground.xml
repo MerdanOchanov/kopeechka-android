@@ -25,21 +25,16 @@
         android:strokeAlpha="0.7"
         android:strokeWidth="1.2" />
 
-    <!-- крылья: три ряда перьев -->
-    <path android:pathData="M49,47 L33,34 L36,43 L49,52 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M49,52 L27,44 L32,52 L49,57 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M49,57 L29,59 L36,64 L49,62 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M59,47 L75,34 L72,43 L59,52 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M59,52 L81,44 L76,52 L59,57 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M59,57 L79,59 L72,64 L59,62 Z" android:fillColor="#F2F2F3" />
+    <!-- крылья подняты, перья — зубцы задней кромки -->
+    <path android:pathData="M48,45 L42,39 L35,38 L31,45 L36,48 L33,55 L38,51 L36,60 L41,54 L41,63 L46,55 L48,49 Z" android:fillColor="#F2F2F3" />
+    <path android:pathData="M60,45 L66,39 L73,38 L77,45 L72,48 L75,55 L70,51 L72,60 L67,54 L67,63 L62,55 L60,49 Z" android:fillColor="#F2F2F3" />
 
     <!-- корпус, хвост, голова, клюв -->
-    <path android:pathData="M49,43 L59,43 L61,58 L54,68 L47,58 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M50,64 L58,64 L59,77 L56,73 L54,79 L52,73 L49,77 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M54,31.5 a5.2,5.2 0 1,0 0.1,0 z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M50,36 L59,36 L58,44 L50,44 Z" android:fillColor="#F2F2F3" />
-    <path android:pathData="M49.6,34.6 L41,37.4 L49.6,40.2 Z" android:fillColor="#F2F2F3" />
+    <path android:pathData="M48,42 L60,42 L58,58 L54,67 L50,58 Z" android:fillColor="#F2F2F3" />
+    <path android:pathData="M50,64 L58,64 L59,75 L56,71 L54,77 L52,71 L49,75 Z" android:fillColor="#F2F2F3" />
+    <path android:pathData="M52,36 a4.2,4.2 0 1,0 0.1,0 z" android:fillColor="#F2F2F3" />
+    <path android:pathData="M48.2,34.4 L41,37.2 L48.2,40 Z" android:fillColor="#F2F2F3" />
 
     <!-- глаз -->
-    <path android:pathData="M52.6,34.2 a1.2,1.2 0 1,0 0.1,0 z" android:fillColor="#1D2D3D" />
+    <path android:pathData="M53.2,35 a1.1,1.1 0 1,0 0.1,0 z" android:fillColor="#1D2D3D" />
 </vector>

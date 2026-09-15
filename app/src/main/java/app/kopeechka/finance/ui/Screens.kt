@@ -46,6 +46,7 @@ import app.kopeechka.finance.data.BudgetRow
 import app.kopeechka.finance.data.CAT_TRANSFER
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.biz
+import app.kopeechka.finance.data.debtDone
 import app.kopeechka.finance.data.bizCompare
 import app.kopeechka.finance.data.bizFacts
 import app.kopeechka.finance.data.Currencies
@@ -248,6 +249,8 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
         }
 
         if (c.s.business) BusinessCard(vm, c)
+
+        if (c.d.debts.any { !c.debtDone(it) }) DebtsCard(vm, c)
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(l.t("home.budget")) { Muted(l.t("home.daysLeft", l.n(c.daysLeft, "day"))) }

@@ -109,6 +109,8 @@ data class AppData(
     val categories: List<Category> = emptyList(),
     val txs: List<Tx> = emptyList(),
     val goals: List<Goal> = emptyList(),
+    /** Долги: кому должен я и кто должен мне. */
+    val debts: List<Debt> = emptyList(),
     /** Прайс, клиенты и заказы модуля «Дело» — пустые, пока он выключен. */
     val products: List<Product> = emptyList(),
     val customers: List<Customer> = emptyList(),

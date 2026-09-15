@@ -135,6 +135,12 @@ object Demo {
         Category(CAT_COST, l.t("demo.code.cost"), l.t("biz.catCost"), color = "#9A5B4A"),
     )
 
+    /** Категории заработка на долге и переплаты по нему. */
+    fun debtCategories(l: Lang): List<Category> = listOf(
+        Category(CAT_DEBT_GAIN, l.t("demo.code.debtGain"), l.t("debt.catGain"), income = true, color = "#7E8B4F"),
+        Category(CAT_DEBT_COST, l.t("demo.code.debtCost"), l.t("debt.catCost"), color = "#8A3B5B"),
+    )
+
     /** Прайс, клиенты, заказы и операции дохода по оплаченным заказам. */
     data class Biz(val products: List<Product>, val customers: List<Customer>, val orders: List<Order>, val txs: List<Tx>)
 

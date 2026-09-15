@@ -76,6 +76,7 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                                 Page.BUSINESS -> BusinessPage(vm, calc)
                                 Page.PRODUCTS -> ProductsPage(vm, calc)
                                 Page.CUSTOMERS -> CustomersPage(vm, calc)
+                                Page.DEBTS -> DebtsPage(vm, calc)
                             }
                         }
                     }
@@ -97,6 +98,8 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.customerEdit?.let { CustomerOverlay(vm, calc, it) }
                 if (vm.orderDraft?.picking == true) ItemPickerSheet(vm, calc)
                 vm.paySheet?.let { PaySheetView(vm, calc, it) }
+                vm.debtCard?.let { DebtCardOverlay(vm, calc, it) }
+                vm.repaySheet?.let { RepaySheetView(vm, calc, it) }
                 if (vm.datePick != null) DateSheet(vm, calc, vm.pickedDate())
             }
             vm.confirm?.let { ConfirmSheet(vm, it) }

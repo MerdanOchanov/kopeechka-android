@@ -61,6 +61,7 @@ class Calc(
     fun cat(id: String): Category = when (id) {
         CAT_TRANSFER -> Category(CAT_TRANSFER, l.t("cat.code.transfer"), l.t("kind.transfer"), color = "#5D5D60")
         CAT_GOAL -> Category(CAT_GOAL, l.t("cat.code.goal"), l.t("goal.one"), color = "#597EA3")
+        CAT_DEBT -> Category(CAT_DEBT, l.t("cat.code.debt"), l.t("debt.one"), color = "#6B4E8A")
         else -> d.categories.firstOrNull { it.id == id } ?: Category(id, "??", l.t("demo.cat.other"))
     }
 
@@ -80,7 +81,7 @@ class Calc(
     val balances: Map<String, Double> by lazy { d.accounts.associate { it.id to balance(it) } }
     val totalMain: Double by lazy { d.accounts.filter { it.inTotal }.sumOf { toMain(balances[it.id] ?: 0.0, it.cur) } }
 
-    fun isReal(t: Tx) = t.cat != CAT_TRANSFER && t.cat != CAT_GOAL
+    fun isReal(t: Tx) = t.cat != CAT_TRANSFER && t.cat != CAT_GOAL && t.cat != CAT_DEBT
     fun txMain(t: Tx) = toMain(t.amount, accCur(t.acc))
 
     // ——— текущий месяц (главный экран и бюджеты) ———
