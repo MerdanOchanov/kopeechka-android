@@ -1615,6 +1615,9 @@ class AppViewModel(
                     return@launch
                 }
                 runDrive(token, action)
+            } catch (e: DriveAuthError) {
+                driveBusy = false
+                say("msg.driveAuthError", e.code)
             } catch (e: DriveError) {
                 driveBusy = false
                 say("msg.driveError", e.text(l))

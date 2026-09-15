@@ -77,7 +77,7 @@ class AndroidPlatform(private val ctx: Context) : Platform {
         val r = try {
             DriveBackup.authorize(ctx)
         } catch (e: ApiException) {
-            throw IllegalStateException(Lang.of("auto").t("msg.driveAuthError", e.statusCode))
+            throw DriveAuthError(e.statusCode)
         }
         if (!r.hasResolution()) return r.accessToken
         // доступ ещё не выдан: показываем системный экран согласия и ждём ответа

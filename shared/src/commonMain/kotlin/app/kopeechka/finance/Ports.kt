@@ -32,6 +32,9 @@ interface SecretStore {
     fun put(name: String, value: String)
 }
 
+/** Вход в Google не удался: код от Play services (10 — приложение не зарегистрировано). */
+class DriveAuthError(val code: Int) : Exception("drive auth failed: $code")
+
 /** Выбранный человеком файл: имя для сообщения и содержимое. */
 data class PickedFile(val name: String, val text: String)
 
