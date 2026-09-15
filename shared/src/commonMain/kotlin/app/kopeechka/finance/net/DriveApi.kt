@@ -1,0 +1,184 @@
+package app.kopeechka.finance.net
+
+import app.kopeechka.finance.data.Lang
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.request
+import io.ktor.client.request.url
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+
+/** Копия на Диске: идентификатор, имя, когда создана (ISO-время от Google) и размер. */
+data class RemoteBackup(val id: String, val name: String, val createdIso: String, val size: Long)
+
+class DriveError(val key: String, val args: List<Any?> = emptyList()) : Exception(key) {
+    fun text(l: Lang) = l.t(key, *args.toTypedArray())
+}
+
+/**
+ * Google Диск через REST API v3 — общий код для Android и iOS.
+ *
+ * Здесь только запросы: токен доступа добывает платформа (на Android —
+ * Google Play services, на iOS будет свой вход). Область доступа drive.file:
+ * приложение видит лишь файлы, которые само создало.
+ */
+object DriveApi {
+    const val SCOPE = "https://www.googleapis.com/auth/drive.file"
+
+    /** Имя папки на Диске берётся из языка интерфейса. */
+    var folderName: String = "Kopeechka"
+
+    private const val FOLDER_MIME = "application/vnd.google-apps.folder"
+    private const val API = "https://www.googleapis.com/drive/v3/files"
+    private const val UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    suspend fun upload(token: String, content: String, name: String): String {
+        val folder = folderId(token, create = true)!!
+        val meta = buildJsonObject {
+            put("name", name)
+            put("mimeType", "application/json")
+            put("parents", buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive(folder)) })
+        }
+        // multipart/related собираем руками: Drive ждёт именно его, а не form-data
+        val boundary = "kopeechka-" + name.hashCode().toString(16)
+        val body = buildString {
+            append("--").append(boundary).append("\r\n")
+            append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+            append(meta.toString()).append("\r\n")
+            append("--").append(boundary).append("\r\n")
+            append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+            append(content).append("\r\n")
+            append("--").append(boundary).append("--")
+        }
+        val resp = send(token) {
+            method = io.ktor.http.HttpMethod.Post
+            url("$UPLOAD?uploadType=multipart&fields=id,name")
+            contentType(ContentType.parse("multipart/related; boundary=$boundary"))
+            setBody(body)
+        }
+        check(resp)
+        return name
+    }
+
+    suspend fun list(token: String): List<RemoteBackup> {
+        val folder = folderId(token, create = false) ?: return emptyList()
+        val obj = parse(
+            check(
+                send(token) {
+                    method = io.ktor.http.HttpMethod.Get
+                    url(API)
+                    parameter("q", "'$folder' in parents and trashed=false")
+                    parameter("orderBy", "createdTime desc")
+                    parameter("fields", "files(id,name,createdTime,size)")
+                    parameter("pageSize", "50")
+                },
+            ),
+        )
+        return obj["files"]?.jsonArray?.map { f ->
+            val o = f.jsonObject
+            RemoteBackup(
+                id = o["id"]!!.jsonPrimitive.content,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                createdIso = o["createdTime"]?.jsonPrimitive?.contentOrNull ?: "",
+                size = o["size"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+            )
+        } ?: emptyList()
+    }
+
+    suspend fun download(token: String, id: String): String {
+        val resp = send(token) {
+            method = io.ktor.http.HttpMethod.Get
+            url("$API/$id?alt=media")
+        }
+        if (resp.status.value !in 200..299) throw DriveError("drive.err.download", listOf(resp.status.value))
+        return resp.bodyAsText().ifBlank { throw DriveError("drive.err.empty") }
+    }
+
+    /** Оставляет только `keep` самых свежих копий, чтобы не засорять Диск. */
+    suspend fun prune(token: String, keep: Int = 10) {
+        list(token).drop(keep).forEach { f ->
+            runCatching {
+                send(token) {
+                    method = io.ktor.http.HttpMethod.Delete
+                    url("$API/${f.id}")
+                }
+            }
+        }
+    }
+
+    private suspend fun folderId(token: String, create: Boolean): String? {
+        val found = parse(
+            check(
+                send(token) {
+                    method = io.ktor.http.HttpMethod.Get
+                    url(API)
+                    parameter("q", "name='$folderName' and mimeType='$FOLDER_MIME' and trashed=false")
+                    parameter("fields", "files(id)")
+                },
+            ),
+        )
+        found["files"]?.jsonArray?.firstOrNull()?.let { return it.jsonObject["id"]!!.jsonPrimitive.content }
+        if (!create) return null
+        val meta = buildJsonObject {
+            put("name", folderName)
+            put("mimeType", FOLDER_MIME)
+        }
+        val made = parse(
+            check(
+                send(token) {
+                    method = io.ktor.http.HttpMethod.Post
+                    url("$API?fields=id")
+                    contentType(ContentType.Application.Json)
+                    setBody(meta.toString())
+                },
+            ),
+        )
+        return made["id"]!!.jsonPrimitive.content
+    }
+
+    private suspend fun send(token: String, build: HttpRequestBuilder.() -> Unit): HttpResponse =
+        try {
+            http.request {
+                header("Authorization", "Bearer $token")
+                build()
+            }
+        } catch (e: DriveError) {
+            throw e
+        } catch (e: Exception) {
+            throw DriveError("drive.err.offline")
+        }
+
+    private fun check(resp: HttpResponse): HttpResponse {
+        val code = resp.status.value
+        if (code !in 200..299) {
+            throw when (code) {
+                401 -> DriveError("drive.err.expired")
+                403 -> DriveError("drive.err.forbidden")
+                else -> DriveError("drive.err.code", listOf(code))
+            }
+        }
+        return resp
+    }
+
+    private suspend fun parse(resp: HttpResponse): JsonObject =
+        runCatching { json.parseToJsonElement(resp.bodyAsText().ifBlank { "{}" }).jsonObject }
+            .getOrElse { throw DriveError("drive.err.code", listOf(resp.status.value)) }
+}

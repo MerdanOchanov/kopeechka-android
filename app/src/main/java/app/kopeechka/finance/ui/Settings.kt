@@ -490,7 +490,7 @@ fun BackupPage(vm: AppViewModel, c: Calc) {
         if (vm.driveList.isEmpty()) Muted(if (s.driveLinked) l.t("backup.listEmpty") else l.t("backup.listNotLinked"), 12f)
         Column {
             vm.driveList.forEach { b ->
-                SettingRow(DriveBackup.formatTime(b.created, l), "${b.name} · ${max(1L, b.size / 1024)} KB") {
+                SettingRow(DriveBackup.formatTime(DriveBackup.createdAt(b), l), "${b.name} · ${max(1L, b.size / 1024)} KB") {
                     SecondaryButton(l.t("common.restore"), { vm.askRestore(b) })
                 }
             }

@@ -1691,7 +1691,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun askRestore(b: RemoteBackup) {
         confirm = Confirm(
             l.t("msg.restoreTitle"),
-            l.t("msg.restoreText", DriveBackup.formatTime(b.created, l)),
+            l.t("msg.restoreText", DriveBackup.formatTime(DriveBackup.createdAt(b), l)),
             l.t("common.restore"),
         ) {
             driveAction { t ->

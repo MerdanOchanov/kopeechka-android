@@ -80,9 +80,5 @@ dependencies {
     // Google Sign-In / авторизация для резервных копий в Google Диске
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
-    // HTTP: Google Drive REST, OpenAI / Gemini / свой endpoint
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // Официальный SDK Anthropic для запросов к Claude
-    implementation("com.anthropic:anthropic-java:2.34.0")
+    // HTTP для Диска и ИИ-советника живёт в :shared на Ktor
 }
