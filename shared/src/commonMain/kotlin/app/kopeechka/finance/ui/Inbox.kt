@@ -24,6 +24,7 @@ import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
+import app.kopeechka.finance.ui.theme.T
 
 /**
  * «На проверку» — то, о чём приложение догадалось само: чек с фотографии

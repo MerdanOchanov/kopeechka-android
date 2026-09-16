@@ -1701,8 +1701,7 @@ class AppViewModel(
                         cur = r.cur.ifBlank { c.accCur(acc) },
                         accId = acc,
                         cat = cat,
-                        raw = r.items.joinToString("
-"),
+                        raw = r.items.joinToString("\n"),
                     ),
                 ) + s.inbox,
                 nextId = s.nextId + 1,
