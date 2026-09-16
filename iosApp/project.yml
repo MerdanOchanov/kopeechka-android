@@ -19,6 +19,9 @@ targets:
         CFBundleShortVersionString: "1.7"
         CFBundleVersion: "8"
         UILaunchScreen: {}
+        # Без этих пояснений iOS не пустит к камере и галерее — их видит человек в запросе доступа
+        NSCameraUsageDescription: Чтобы снять чек и разобрать его сумму
+        NSPhotoLibraryUsageDescription: Чтобы выбрать фотографию чека и разобрать его сумму
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:

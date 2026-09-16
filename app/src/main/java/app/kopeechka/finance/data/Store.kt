@@ -35,7 +35,7 @@ class Store(context: Context) : app.kopeechka.finance.Storage {
 
     override fun replace(d: AppData) = update { d }
 
-    override fun exportJson(): String = json.encodeToString(AppData.serializer(), current)
+    override fun exportJson(): String = json.encodeToString(AppData.serializer(), current.forExport())
 
     /** Бросает исключение, если JSON не похож на копию «Копеечки». */
     override fun parseBackup(text: String): AppData {

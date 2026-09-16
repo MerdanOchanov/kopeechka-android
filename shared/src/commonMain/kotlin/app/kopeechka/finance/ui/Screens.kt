@@ -229,6 +229,8 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
             }
         }
 
+        InboxBar(vm, c)
+
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SectionTitle(l.t("home.accounts")) { GhostButton(l.t("home.transfer"), { vm.openAdd(Kind.TRANSFER) }) }
             CellGrid(c.d.accounts, 3, onClick = { vm.curSheet = CurSheet.Acc(it.id) }) { a ->

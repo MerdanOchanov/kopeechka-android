@@ -38,6 +38,15 @@ class DriveAuthError(val code: Int) : Exception("drive auth failed: $code")
 /** Выбранный человеком файл: имя для сообщения и содержимое. */
 data class PickedFile(val name: String, val text: String)
 
+/**
+ * Снимок чека: содержимое уже сжато и закодировано в base64.
+ * Сжатие делает платформа — общий код с пикселями не работает.
+ */
+data class PickedImage(val base64: String, val mime: String = "image/jpeg")
+
+/** Откуда берём снимок чека. */
+enum class ImageSource { CAMERA, GALLERY }
+
 /** Всё платформенное, что нужно экранам. */
 interface Platform {
     /** Версия приложения для строки «о программе». */
@@ -57,6 +66,18 @@ interface Platform {
 
     /** Системный диалог «что открыть». null, если отменили. */
     suspend fun openTextFile(): PickedFile?
+
+    // ——— чеки ———
+
+    /**
+     * Снять чек камерой или выбрать из галереи. Платформа ужимает снимок
+     * до разумного размера: за мегапиксели платит тот, у кого ключ ИИ.
+     * null — человек отказался или платформа этого не умеет.
+     */
+    suspend fun pickImage(source: ImageSource): PickedImage?
+
+    /** Умеет ли платформа снимки вообще: на чём не умеет, кнопку не показываем. */
+    val canPickImage: Boolean
 
     // ——— Google Диск ———
 

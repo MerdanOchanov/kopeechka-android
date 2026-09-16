@@ -1,6 +1,7 @@
 package app.kopeechka.finance
 
 import app.kopeechka.finance.data.AppData
+import app.kopeechka.finance.data.forExport
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.Lang
@@ -46,7 +47,7 @@ class IosStorage : Storage {
 
     override fun replace(d: AppData) = update { d }
 
-    override fun exportJson(): String = json.encodeToString(AppData.serializer(), current)
+    override fun exportJson(): String = json.encodeToString(AppData.serializer(), current.forExport())
 
     override fun parseBackup(text: String): AppData {
         val d = json.decodeFromString(AppData.serializer(), text)

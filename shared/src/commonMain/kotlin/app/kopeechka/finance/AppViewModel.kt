@@ -28,6 +28,11 @@ import app.kopeechka.finance.data.debtLeft
 import app.kopeechka.finance.data.splitPayment
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
+import app.kopeechka.finance.data.INBOX_PHOTO
+import app.kopeechka.finance.data.InboxItem
+import app.kopeechka.finance.data.Receipt
+import app.kopeechka.finance.data.ReceiptScan
+import app.kopeechka.finance.data.epochDate
 import app.kopeechka.finance.data.decimalString
 import app.kopeechka.finance.data.Goal
 import app.kopeechka.finance.data.Lang
@@ -46,6 +51,7 @@ import app.kopeechka.finance.data.orderCur
 import app.kopeechka.finance.data.orderTotal
 import app.kopeechka.finance.data.product
 import app.kopeechka.finance.net.Ai
+import app.kopeechka.finance.net.AiImage
 import app.kopeechka.finance.net.AiError
 import app.kopeechka.finance.net.DriveApi
 import app.kopeechka.finance.net.DriveError
@@ -54,6 +60,7 @@ import app.kopeechka.finance.net.formatBackupTime
 import kotlinx.datetime.toLocalDateTime
 import app.kopeechka.finance.net.backupMillis
 import kotlinx.coroutines.Job
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -195,6 +202,19 @@ class AppViewModel(
     var goalSheet by mutableStateOf<GoalSheet?>(null)
     var confirm by mutableStateOf<Confirm?>(null)
     var advisorOpen by mutableStateOf(false)
+
+    /** Идёт распознавание чека. */
+    var scanning by mutableStateOf(false)
+        private set
+
+    /** Открыт список «на проверку». */
+    var inboxOpen by mutableStateOf(false)
+
+    /** Открыт выбор «камера или галерея». */
+    var scanSheet by mutableStateOf(false)
+
+    /** Черновик, который сейчас правят перед записью. */
+    var inboxEdit by mutableStateOf<InboxItem?>(null)
     var toast by mutableStateOf<String?>(null)
     var onbStep by mutableStateOf(0)
 
@@ -310,6 +330,9 @@ class AppViewModel(
     fun back(): Boolean {
         when {
             confirm != null -> confirm = null
+            inboxEdit != null -> inboxEdit = null
+            scanSheet -> scanSheet = false
+            inboxOpen -> inboxOpen = false
             datePick != null -> datePick = null
             repaySheet != null -> repaySheet = null
             debtCard != null -> debtCard = null
@@ -1117,6 +1140,9 @@ class AppViewModel(
     // ——— «Дело»: прайс, клиенты, заказы ———
 
     /** Число из поля ввода: «1 200,50», «1.5», «1,5» — всё одно. */
+    /** Число из поля ввода: пробелы и запятая допускаются. */
+    fun numOf(text: String): Double = num(text)
+
     private fun num(text: String): Double {
         val t = text.trim().replace(" ", "").replace(" ", "").replace(',', '.')
         val i = t.lastIndexOf('.')
@@ -1125,7 +1151,8 @@ class AppViewModel(
     }
 
     /** Число обратно в поле: целое — без хвоста, дробное — с разделителем языка. */
-    private fun numText(v: Double): String {
+    /** Число в текст для поля ввода. */
+    fun numText(v: Double): String {
         if (v == v.roundToLong().toDouble()) return v.roundToLong().toString()
         val s = decimalString(v, 2)
         return if (l.code == "en") s else s.replace('.', ',')
@@ -1615,6 +1642,114 @@ class AppViewModel(
                 asking = false
             }
         }
+    }
+
+    // ——— чеки и черновики ———
+
+    /**
+     * Чек читает та же модель, что и советует по бюджету, поэтому кнопка
+     * появляется только при готовом ключе: без него распознавать нечем.
+     */
+    fun canScan(): Boolean {
+        val p = Ai.provider(store.current.settings.aiProvider)
+        return platform.canPickImage && (!p.needsKey || hasKey(p.key))
+    }
+
+    fun scanReceipt(source: ImageSource) {
+        if (scanning) return
+        val s = store.current.settings
+        val p = Ai.provider(s.aiProvider)
+        val key = secure.get(keyName(p.key))
+        if (p.needsKey && key.isBlank()) return say("msg.receiptNoKey", p.name(l))
+        viewModelScope.launch {
+            val img = runCatching { platform.pickImage(source) }.getOrNull() ?: return@launch
+            scanning = true
+            try {
+                val c = calc
+                val cats = store.current.categories.filter { !it.income }.joinToString(", ") { it.name }
+                val prompt = l.t("ai.receiptPrompt", cats, c.main, epochDate(c.todayDay).isoString())
+                val answer = Ai.ask(p.key, modelFor(s), key, s.customEndpoint, prompt, listOf(AiImage(img.base64, img.mime)))
+                val scan = Receipt.parse(answer)
+                if (scan == null) say("msg.receiptUnreadable") else addFromReceipt(scan)
+            } catch (e: AiError) {
+                flash(e.text(l))
+            } catch (e: Exception) {
+                flash(e.message ?: l.t("msg.receiptUnreadable"))
+            } finally {
+                scanning = false
+            }
+        }
+    }
+
+    private fun addFromReceipt(r: ReceiptScan) {
+        val c = calc
+        val cat = store.current.categories.firstOrNull { !it.income && it.name.equals(r.cat, ignoreCase = true) }?.id
+            ?: store.current.categories.firstOrNull { !it.income }?.id.orEmpty()
+        // счёт угадываем по валюте чека: в поездке это почти всегда правильный ответ
+        val acc = store.current.accounts.firstOrNull { it.cur == r.cur }?.id
+            ?: store.current.accounts.firstOrNull()?.id.orEmpty()
+        store.update { s ->
+            s.copy(
+                inbox = listOf(
+                    InboxItem(
+                        id = s.nextId,
+                        source = INBOX_PHOTO,
+                        at = Clock.System.now().toEpochMilliseconds(),
+                        date = r.date ?: c.todayDay,
+                        title = r.merchant.ifBlank { l.t("inbox.receipt") },
+                        amount = r.total,
+                        cur = r.cur.ifBlank { c.accCur(acc) },
+                        accId = acc,
+                        cat = cat,
+                        raw = r.items.joinToString("
+"),
+                    ),
+                ) + s.inbox,
+                nextId = s.nextId + 1,
+            )
+        }
+        inboxOpen = true
+        inboxEdit = store.current.inbox.firstOrNull()
+    }
+
+    fun editInbox(f: (InboxItem) -> InboxItem) {
+        inboxEdit = inboxEdit?.let(f)
+    }
+
+    /** Подтверждённый черновик превращается в обычную операцию. */
+    fun acceptInbox() {
+        val item = inboxEdit ?: return
+        val c = calc
+        if (item.amount <= 0) return say("msg.amountNeeded")
+        val a = c.acc(item.accId) ?: return say("msg.pickAccount")
+        val amount = c.conv(item.amount, item.cur.ifBlank { a.cur }, a.cur)
+        if (!c.s.allowNegative && !item.income && c.balance(a) < amount) return say("msg.notEnough", a.name)
+        store.update { s ->
+            s.copy(
+                txs = listOf(
+                    Tx(
+                        id = s.nextId,
+                        date = item.date,
+                        title = item.title.ifBlank { l.t("inbox.receipt") },
+                        cat = item.cat,
+                        acc = a.id,
+                        amount = if (item.income) amount else -amount,
+                        note = item.note,
+                    ),
+                ) + s.txs,
+                nextId = s.nextId + 1,
+                inbox = s.inbox.filterNot { it.id == item.id },
+            )
+        }
+        inboxEdit = null
+        if (store.current.inbox.isEmpty()) inboxOpen = false
+        say("msg.inboxAccepted", c.fmt(amount, a.cur))
+    }
+
+    fun dropInbox(id: Long) {
+        store.update { s -> s.copy(inbox = s.inbox.filterNot { it.id == id }) }
+        inboxEdit = null
+        if (store.current.inbox.isEmpty()) inboxOpen = false
     }
 
     // ——— Google Диск ———

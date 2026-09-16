@@ -115,6 +115,18 @@ data class AppData(
     val products: List<Product> = emptyList(),
     val customers: List<Customer> = emptyList(),
     val orders: List<Order> = emptyList(),
+    /**
+     * Черновики из чеков и СМС — ждут подтверждения человеком.
+     * Не уходят ни в копию, ни в синхронизацию: см. [forExport].
+     */
+    val inbox: List<InboxItem> = emptyList(),
     val settings: Settings = Settings(),
     val nextId: Long = 1000,
 )
+
+/**
+ * Состояние, которое не стыдно отдать наружу — в резервную копию или другому
+ * человеку при синхронизации. Черновики остаются на телефоне: в них лежит
+ * текст банковских СМС, которому в общей папке не место.
+ */
+fun AppData.forExport(): AppData = copy(inbox = emptyList())

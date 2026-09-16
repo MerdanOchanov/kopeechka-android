@@ -100,6 +100,9 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.paySheet?.let { PaySheetView(vm, calc, it) }
                 vm.debtCard?.let { DebtCardOverlay(vm, calc, it) }
                 vm.repaySheet?.let { RepaySheetView(vm, calc, it) }
+                if (vm.inboxOpen) InboxOverlay(vm, calc)
+                vm.inboxEdit?.let { InboxEditSheet(vm, calc, it) }
+                if (vm.scanSheet) ScanSourceSheet(vm)
                 if (vm.datePick != null) DateSheet(vm, calc, vm.pickedDate())
             }
             vm.confirm?.let { ConfirmSheet(vm, it) }

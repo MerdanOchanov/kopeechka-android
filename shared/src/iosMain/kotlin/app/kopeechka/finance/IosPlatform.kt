@@ -18,7 +18,7 @@ import platform.UserNotifications.UNUserNotificationCenter
 /**
  * iOS-сторона платформенных портов.
  *
- * Сделано: версия приложения и вечернее напоминание.
+ * Сделано: версия приложения, вечернее напоминание и снимок чека.
  * Пока не сделано: системные диалоги файлов (UIDocumentPicker) и вход в Google —
  * для них нужен контроллер и отдельный поток авторизации, это следующий шаг.
  * Приложение при этом полностью рабочее: данные, отчёты, бизнес и долги живут
@@ -71,6 +71,14 @@ class IosPlatform(private val storage: IosStorage) : Platform {
 
     override suspend fun openTextFile(): PickedFile? =
         throw UnsupportedOperationException("файлы на iOS появятся вместе с UIDocumentPicker")
+
+    // ——— чеки ———
+
+    private val picker = IosImagePicker()
+
+    override val canPickImage = true
+
+    override suspend fun pickImage(source: ImageSource): PickedImage? = picker.pick(source)
 
     override suspend fun driveToken(): String? = null
 

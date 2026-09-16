@@ -18,6 +18,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /** Ошибка с ключом перевода: текст собирает вызывающий на языке интерфейса. */
+/** Картинка для запроса к ИИ: содержимое в base64 и тип, например image/jpeg. */
+data class AiImage(val base64: String, val mime: String = "image/jpeg")
+
 class AiError(val key: String, val args: List<Any?> = emptyList()) : Exception(key) {
     fun text(l: Lang) = l.t(key, *args.toTypedArray())
 }
@@ -63,19 +66,26 @@ object Ai {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun ask(providerKey: String, model: String, apiKey: String, endpoint: String, prompt: String): String =
+    suspend fun ask(
+        providerKey: String,
+        model: String,
+        apiKey: String,
+        endpoint: String,
+        prompt: String,
+        images: List<AiImage> = emptyList(),
+    ): String =
         when (providerKey) {
-            "claude" -> askClaude(model, apiKey, prompt)
-            "openai" -> askOpenAiCompatible("https://api.openai.com/v1", model, apiKey, prompt, "OpenAI")
-            "gemini" -> askGemini(model, apiKey, prompt)
+            "claude" -> askClaude(model, apiKey, prompt, images)
+            "openai" -> askOpenAiCompatible("https://api.openai.com/v1", model, apiKey, prompt, images, "OpenAI")
+            "gemini" -> askGemini(model, apiKey, prompt, images)
             else -> {
                 if (endpoint.isBlank()) throw AiError("ai.err.noEndpoint")
-                askOpenAiCompatible(endpoint.trim().trimEnd('/'), model, apiKey, prompt, "Endpoint")
+                askOpenAiCompatible(endpoint.trim().trimEnd('/'), model, apiKey, prompt, images, "Endpoint")
             }
         }
 
     /** Claude: Messages API напрямую. */
-    private suspend fun askClaude(model: String, apiKey: String, prompt: String): String {
+    private suspend fun askClaude(model: String, apiKey: String, prompt: String, images: List<AiImage>): String {
         // Серверный откат на другую модель, если основная откажется отвечать (Opus 5 / Fable 5).
         val fallback = model.startsWith("claude-opus-5") || model.startsWith("claude-fable-5")
         val body = buildJsonObject {
@@ -84,7 +94,24 @@ object Ai {
             put("messages", buildJsonArray {
                 add(buildJsonObject {
                     put("role", "user")
-                    put("content", prompt)
+                    // без картинок содержимое остаётся строкой — так же, как было до чеков
+                    if (images.isEmpty()) {
+                        put("content", prompt)
+                    } else {
+                        put("content", buildJsonArray {
+                            images.forEach { img ->
+                                add(buildJsonObject {
+                                    put("type", "image")
+                                    put("source", buildJsonObject {
+                                        put("type", "base64")
+                                        put("media_type", img.mime)
+                                        put("data", img.base64)
+                                    })
+                                })
+                            }
+                            add(buildJsonObject { put("type", "text"); put("text", prompt) })
+                        })
+                    }
                 })
             })
             if (fallback) put("fallbacks", "default")
@@ -102,13 +129,32 @@ object Ai {
         return text
     }
 
-    private suspend fun askOpenAiCompatible(base: String, model: String, apiKey: String, prompt: String, label: String): String {
+    private suspend fun askOpenAiCompatible(
+        base: String,
+        model: String,
+        apiKey: String,
+        prompt: String,
+        images: List<AiImage>,
+        label: String,
+    ): String {
         val body = buildJsonObject {
             put("model", model)
             put("messages", buildJsonArray {
                 add(buildJsonObject {
                     put("role", "user")
-                    put("content", prompt)
+                    if (images.isEmpty()) {
+                        put("content", prompt)
+                    } else {
+                        put("content", buildJsonArray {
+                            add(buildJsonObject { put("type", "text"); put("text", prompt) })
+                            images.forEach { img ->
+                                add(buildJsonObject {
+                                    put("type", "image_url")
+                                    put("image_url", buildJsonObject { put("url", "data:${img.mime};base64,${img.base64}") })
+                                })
+                            }
+                        })
+                    }
                 })
             })
         }
@@ -120,12 +166,24 @@ object Ai {
             ?: throw AiError("ai.err.empty", listOf(label))
     }
 
-    private suspend fun askGemini(model: String, apiKey: String, prompt: String): String {
+    private suspend fun askGemini(model: String, apiKey: String, prompt: String, images: List<AiImage>): String {
         val body = buildJsonObject {
             put("contents", buildJsonArray {
                 add(buildJsonObject {
                     put("role", "user")
-                    put("parts", buildJsonArray { add(buildJsonObject { put("text", prompt) }) })
+                    put("parts", buildJsonArray {
+                        images.forEach { img ->
+                            add(
+                                buildJsonObject {
+                                    put("inline_data", buildJsonObject {
+                                        put("mime_type", img.mime)
+                                        put("data", img.base64)
+                                    })
+                                },
+                            )
+                        }
+                        add(buildJsonObject { put("text", prompt) })
+                    })
                 })
             })
         }

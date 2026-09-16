@@ -3,7 +3,13 @@ package app.kopeechka.finance
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
+import android.util.Base64
+import androidx.core.content.FileProvider
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.net.DriveApi
 import app.kopeechka.finance.net.DriveBackup
@@ -27,9 +33,14 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     val prompts = MutableSharedFlow<FilePrompt>(extraBufferCapacity = 1)
     val authRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
+    val imagePrompts = MutableSharedFlow<ImageSource>(extraBufferCapacity = 1)
 
     private var pendingFile: CompletableDeferred<Uri?>? = null
     private var pendingAuth: CompletableDeferred<String?>? = null
+    private var pendingImage: CompletableDeferred<Uri?>? = null
+
+    /** Куда камера пишет снимок: файл в кэше, отданный системе через FileProvider. */
+    private var cameraTarget: Uri? = null
 
     // ——— напоминания и фоновая копия ———
 
@@ -71,6 +82,74 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     private fun nameOf(uri: Uri) = uri.lastPathSegment?.substringAfterLast('/') ?: "CSV"
 
+    // ——— чеки ———
+
+    override val canPickImage = true
+
+    override suspend fun pickImage(source: ImageSource): PickedImage? {
+        val waiter = CompletableDeferred<Uri?>()
+        pendingImage = waiter
+        imagePrompts.emit(source)
+        val uri = waiter.await() ?: return null
+        return runCatching { PickedImage(encode(uri)) }.getOrNull()
+    }
+
+    /** Activity спрашивает, куда камере писать снимок. */
+    fun newCameraTarget(): Uri {
+        val dir = File(ctx.cacheDir, "receipts").apply { mkdirs() }
+        val file = File(dir, "receipt-${System.currentTimeMillis()}.jpg")
+        return FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file).also { cameraTarget = it }
+    }
+
+    fun onImageChosen(uri: Uri?) {
+        pendingImage?.complete(uri)
+        pendingImage = null
+    }
+
+    /** Камера не возвращает Uri — только «получилось или нет». */
+    fun onPhotoTaken(ok: Boolean) {
+        pendingImage?.complete(if (ok) cameraTarget else null)
+        pendingImage = null
+    }
+
+    /**
+     * Снимок ужимается до 1600 точек по длинной стороне и кодируется в base64.
+     * Полноразмерное фото с телефона — это мегабайты, за которые платит владелец
+     * ключа, а мелкий шрифт чека от такого сжатия не страдает.
+     */
+    private fun encode(uri: Uri): String {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = generateSequence(1) { it * 2 }.first { longest / it <= MAX_SIDE * 2 }
+        }
+        val raw = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+            ?: error("снимок не читается")
+        val rotated = applyOrientation(uri, raw)
+        val scale = MAX_SIDE.toFloat() / maxOf(rotated.width, rotated.height)
+        val bmp = if (scale >= 1f) rotated else
+            Bitmap.createScaledBitmap(rotated, (rotated.width * scale).toInt(), (rotated.height * scale).toInt(), true)
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    /** Телефон снимает «боком» и пишет поворот в EXIF: без этого текст чека лежит на боку. */
+    private fun applyOrientation(uri: Uri, bmp: Bitmap): Bitmap {
+        val orientation = runCatching {
+            ctx.contentResolver.openInputStream(uri)?.use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1) }
+        }.getOrNull() ?: 1
+        val degrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> return bmp
+        }
+        val m = Matrix().apply { postRotate(degrees) }
+        return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+    }
+
     // ——— Google Диск ———
 
     override suspend fun driveToken(): String? {
@@ -100,5 +179,9 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     override fun saveBeforeRestore(json: String) {
         runCatching { File(ctx.filesDir, "before-restore.json").writeText(json) }
+    }
+
+    private companion object {
+        const val MAX_SIDE = 1600
     }
 }

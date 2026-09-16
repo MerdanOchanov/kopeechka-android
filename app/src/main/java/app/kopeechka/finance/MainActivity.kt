@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +45,14 @@ class MainActivity : ComponentActivity() {
         host.platform.onFileChosen(uri)
     }
 
+    private val takePhoto = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        host.platform.onPhotoTaken(ok)
+    }
+
+    private val pickPhoto = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        host.platform.onImageChosen(uri)
+    }
+
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.setRemind(true) else vm.flash(vm.l.t("msg.noNotifyPermission"))
     }
@@ -65,6 +74,18 @@ class MainActivity : ComponentActivity() {
                         createCsv.launch(req.name)
                     } else {
                         openCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*"))
+                    }
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                host.platform.imagePrompts.collect { src ->
+                    if (src == ImageSource.CAMERA) {
+                        takePhoto.launch(host.platform.newCameraTarget())
+                    } else {
+                        pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                 }
             }

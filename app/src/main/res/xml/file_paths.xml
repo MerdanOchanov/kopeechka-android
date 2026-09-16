@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Снимок чека кладётся в кэш и отдаётся камере через FileProvider:
+     прямой file:// Android с 7.0 не принимает. -->
+<paths>
+    <cache-path name="receipts" path="receipts/" />
+</paths>
