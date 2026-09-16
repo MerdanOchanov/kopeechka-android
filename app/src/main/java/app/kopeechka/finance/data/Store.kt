@@ -25,7 +25,10 @@ class Store(context: Context) : app.kopeechka.finance.Storage {
 
     override fun update(f: (AppData) -> AppData) {
         synchronized(lock) {
-            val next = f(_data.value)
+            val before = _data.value
+            // отметки времени и надгробия ставятся здесь, а не в каждом обработчике:
+            // так их нельзя забыть, а удаления запоминаются сами (см. Sync)
+            val next = Sync.stamp(before, f(before), System.currentTimeMillis())
             Currencies.setLang(Lang.of(next.settings.lang))
             Currencies.registerCustom(next.settings.customCurrencies)
             _data.value = next

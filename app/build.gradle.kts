@@ -75,4 +75,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
     // HTTP для Диска и ИИ-советника живёт в :shared на Ktor
+
+    // Тесты слияния: логика общая, но гонять её достаточно на JVM
+    testImplementation("junit:junit:4.13.2")
 }

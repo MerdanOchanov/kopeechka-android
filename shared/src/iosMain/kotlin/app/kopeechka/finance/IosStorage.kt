@@ -5,6 +5,8 @@ import app.kopeechka.finance.data.forExport
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.data.Sync
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.cinterop.BetaInteropApi
@@ -38,7 +40,9 @@ class IosStorage : Storage {
     override val current: AppData get() = _data.value
 
     override fun update(f: (AppData) -> AppData) {
-        val next = f(_data.value)
+        val before = _data.value
+        // см. Store на Android: отметки времени и надгробия ставятся в одном месте
+        val next = Sync.stamp(before, f(before), Clock.System.now().toEpochMilliseconds())
         Currencies.setLang(Lang.of(next.settings.lang))
         Currencies.registerCustom(next.settings.customCurrencies)
         _data.value = next

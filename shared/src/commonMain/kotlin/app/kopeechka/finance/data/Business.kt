@@ -45,6 +45,8 @@ data class Product(
     /** Единица измерения: шт, час, кг. Пусто — без единицы. */
     val unit: String = "",
     val archived: Boolean = false,
+    /** Когда запись меняли, миллисекунды. Нужна слиянию: см. Sync. */
+    val changedAt: Long = 0,
 )
 
 @Serializable
@@ -53,6 +55,8 @@ data class Customer(
     val name: String,
     val contact: String = "",
     val note: String = "",
+    /** Когда запись меняли, миллисекунды. Нужна слиянию: см. Sync. */
+    val changedAt: Long = 0,
 )
 
 /** Позиция заказа. Цена и себестоимость зафиксированы на момент заказа — в валюте заказа. */
@@ -87,6 +91,8 @@ data class Order(
     /** Операция расхода, если себестоимость списывали со счёта. */
     val costTxId: Long? = null,
     val note: String = "",
+    /** Когда запись меняли, миллисекунды. Нужна слиянию: см. Sync. */
+    val changedAt: Long = 0,
 )
 
 /** Итоги дела за отрезок времени. */
