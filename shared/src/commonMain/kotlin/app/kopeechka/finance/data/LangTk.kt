@@ -237,6 +237,8 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "goal.sheetTitle" to "Maksat üçin ýygna",
     "goal.sheetSub" to "{0} · {2}-dan {1}",
     "goal.sum" to "Möçber",
+    "goal.own" to "Öz möçberiň, {0}",
+    "goal.leftHint" to "Maksada ýetmäge {0} galdy",
     "goal.fromAcc" to "Haýsy hasapdan",
     "goal.putSum" to "{0} ýygna",
 

@@ -317,6 +317,8 @@ internal val RU_STRINGS: Map<String, String> = mapOf(
     "goal.sheetTitle" to "Отложить на цель",
     "goal.sheetSub" to "{0} · {1} из {2}",
     "goal.sum" to "Сумма",
+    "goal.own" to "Своя сумма, {0}",
+    "goal.leftHint" to "До цели осталось {0}",
     "goal.fromAcc" to "Со счёта",
     "goal.putSum" to "Отложить {0}",
 

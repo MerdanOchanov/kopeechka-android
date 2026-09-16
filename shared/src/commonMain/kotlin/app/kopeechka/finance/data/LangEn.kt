@@ -233,6 +233,8 @@ internal val EN_STRINGS: Map<String, String> = mapOf(
     "goal.sheetTitle" to "Set aside for a goal",
     "goal.sheetSub" to "{0} · {1} of {2}",
     "goal.sum" to "Amount",
+    "goal.own" to "Your own amount, {0}",
+    "goal.leftHint" to "{0} left to reach the goal",
     "goal.fromAcc" to "From account",
     "goal.putSum" to "Set aside {0}",
 

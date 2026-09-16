@@ -560,23 +560,36 @@ fun GoalContributeSheet(vm: AppViewModel, c: Calc, gs: GoalSheet) {
         Kicker(l.t("goal.sum"))
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             vm.goalPresets(g.cur).forEach { a ->
-                val st = opt(a == gs.amount)
+                val st = opt(gs.typed.isEmpty() && a == gs.amount)
                 Box(
                     Modifier
                         .weight(1f)
                         .background(st.bg)
                         .hairline(st.border)
-                        .tap { vm.goalSheet = gs.copy(amount = a) }
+                        .tap { vm.setGoalPreset(a) }
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) { Text(c.fmt(a, g.cur), style = T.h(12.sp, st.fg), maxLines = 1) }
             }
         }
+        val left = vm.goalLeft(g)
+        Field(
+            l.t("goal.own", Currencies.sym(g.cur)),
+            gs.typed,
+            { vm.setGoalTyped(it) },
+            numeric = true,
+            placeholder = "0",
+            note = if (left > 0) l.t("goal.leftHint", c.fmt(left, g.cur)) else l.t("goal.done"),
+        )
         Kicker(l.t("goal.fromAcc"))
         ChipFlow {
             c.d.accounts.forEach { a -> Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == gs.from, { vm.goalSheet = gs.copy(from = a.id) }) }
         }
-        PrimaryButton(l.t("goal.putSum", c.fmt(gs.amount, g.cur)), { vm.contribute() })
+        PrimaryButton(
+            if (gs.amount > 0) l.t("goal.putSum", c.fmt(gs.amount, g.cur)) else l.t("goal.put"),
+            { vm.contribute() },
+            enabled = gs.amount > 0,
+        )
     }
 }
 

@@ -122,7 +122,8 @@ data class CatEdit(
 /** Черновик валюты, которой нет в каталоге. */
 data class CurrencyDraft(val code: String = "", val sym: String = "", val name: String = "", val rate: String = "")
 data class GoalEdit(val id: String? = null, val name: String = "", val target: String = "", val hint: String = "", val cur: String = "RUB")
-data class GoalSheet(val goalId: String, val amount: Double, val from: String)
+/** Шторка «отложить на цель». typed — своя сумма из поля; пусто, когда выбран пресет. */
+data class GoalSheet(val goalId: String, val amount: Double, val from: String, val typed: String = "")
 data class Confirm(val title: String, val text: String, val action: String, val onYes: () -> Unit)
 
 /** Запрос к системному диалогу файлов: "create" — сохранить, "open" — открыть. */
@@ -834,8 +835,22 @@ class AppViewModel(
         goalSheet = GoalSheet(goalId, goalPresets(g.cur)[1], from)
     }
 
+    /** Выбран готовый вариант — поле своей суммы очищается. */
+    fun setGoalPreset(amount: Double) {
+        goalSheet = goalSheet?.copy(amount = amount, typed = "")
+    }
+
+    /** Ввод своей суммы: пресеты перестают быть выбранными. */
+    fun setGoalTyped(text: String) {
+        goalSheet = goalSheet?.copy(amount = num(text), typed = text)
+    }
+
+    /** Сколько осталось до цели; ноль — цель уже достигнута. */
+    fun goalLeft(g: Goal): Double = (g.target - g.saved).coerceAtLeast(0.0)
+
     fun contribute() {
         val gs = goalSheet ?: return
+        if (gs.amount <= 0) return
         val c = calc
         val g = store.current.goals.firstOrNull { it.id == gs.goalId } ?: return
         val a = c.acc(gs.from) ?: return
