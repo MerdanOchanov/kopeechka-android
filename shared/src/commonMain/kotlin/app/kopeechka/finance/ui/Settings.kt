@@ -213,6 +213,19 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             }
         }
 
+        if (vm.canReadSms) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionTitle(l.t("sms.title"))
+                Muted(l.t("sms.settingsNote"), 11.5f, color = col.n700)
+                SettingRow(l.t("sms.enable"), l.t("sms.enableSub")) {
+                    Toggle(s.sms) { vm.setSmsModule(it) }
+                }
+                if (s.sms) {
+                    SecondaryButton(l.t("sms.openPage"), { vm.openPage(Page.SMS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
+                }
+            }
+        }
+
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle(l.t("set.money"))
             SettingRow(l.t("set.allowNegative"), l.t("set.allowNegativeSub")) {

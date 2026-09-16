@@ -100,6 +100,8 @@ data class Settings(
     val aiSets: Set<String> = setOf("ops", "budgets", "accounts"),
     /** Модуль «Дело»: прайс, клиенты, заказы. Выключен — приложение выглядит как прежде. */
     val business: Boolean = false,
+    /** Чтение банковских СМС. Только Android: iOS доступа к сообщениям не даёт. */
+    val sms: Boolean = false,
 )
 
 @Serializable
@@ -115,6 +117,13 @@ data class AppData(
     val products: List<Product> = emptyList(),
     val customers: List<Customer> = emptyList(),
     val orders: List<Order> = emptyList(),
+    /** Правила чтения банковских СМС: от кого приходят и к какому счёту относятся. */
+    val smsSources: List<SmsSource> = emptyList(),
+    /**
+     * Магазин → категория: приложение запоминает выбор человека и в следующий раз
+     * подставляет ту же категорию само.
+     */
+    val merchantCats: Map<String, String> = emptyMap(),
     /**
      * Черновики из чеков и СМС — ждут подтверждения человеком.
      * Не уходят ни в копию, ни в синхронизацию: см. [forExport].

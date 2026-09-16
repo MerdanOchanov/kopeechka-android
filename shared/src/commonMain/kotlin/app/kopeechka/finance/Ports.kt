@@ -2,6 +2,7 @@ package app.kopeechka.finance
 
 import app.kopeechka.finance.data.AppData
 import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.data.SmsMessage
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -78,6 +79,20 @@ interface Platform {
 
     /** Умеет ли платформа снимки вообще: на чём не умеет, кнопку не показываем. */
     val canPickImage: Boolean
+
+    // ——— банковские СМС ———
+
+    /**
+     * Может ли платформа читать сообщения. На iOS — нет и не будет:
+     * Apple не открывает приложениям доступ к СМС.
+     */
+    val canReadSms: Boolean
+
+    /** Спросить разрешение на чтение сообщений. false — отказали. */
+    suspend fun requestSmsAccess(): Boolean
+
+    /** Сообщения за последние дни — чтобы разобрать уже пришедшее. */
+    suspend fun readSmsHistory(days: Int): List<SmsMessage>
 
     // ——— Google Диск ———
 

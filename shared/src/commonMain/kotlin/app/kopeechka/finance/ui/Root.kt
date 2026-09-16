@@ -77,6 +77,7 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                                 Page.PRODUCTS -> ProductsPage(vm, calc)
                                 Page.CUSTOMERS -> CustomersPage(vm, calc)
                                 Page.DEBTS -> DebtsPage(vm, calc)
+                                Page.SMS -> SmsPage(vm, calc)
                             }
                         }
                     }
@@ -100,6 +101,7 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.paySheet?.let { PaySheetView(vm, calc, it) }
                 vm.debtCard?.let { DebtCardOverlay(vm, calc, it) }
                 vm.repaySheet?.let { RepaySheetView(vm, calc, it) }
+                vm.smsEdit?.let { SmsEditOverlay(vm, calc, it) }
                 if (vm.inboxOpen) InboxOverlay(vm, calc)
                 vm.inboxEdit?.let { InboxEditSheet(vm, calc, it) }
                 if (vm.scanSheet) ScanSourceSheet(vm)

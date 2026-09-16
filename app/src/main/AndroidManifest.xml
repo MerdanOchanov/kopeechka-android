@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Чтение банковских СМС: спрашивается только при включении раздела «СМС от банков».
+         Тексты сообщений не покидают телефон — ни в копию, ни в синхронизацию. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+
     <!-- allowBackup=false: у приложения своя резервная копия в Google Диске,
          а зашифрованные API-ключи не должны уезжать в системный бэкап.
          usesCleartextTraffic: нужен для «своего endpoint» по http в локальной сети. -->
@@ -28,6 +33,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="500">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".MainActivity"

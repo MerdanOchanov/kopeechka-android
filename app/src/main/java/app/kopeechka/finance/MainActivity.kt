@@ -53,6 +53,10 @@ class MainActivity : ComponentActivity() {
         host.platform.onImageChosen(uri)
     }
 
+    private val smsPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        host.platform.onPermissionResult(result.values.all { it })
+    }
+
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.setRemind(true) else vm.flash(vm.l.t("msg.noNotifyPermission"))
     }
@@ -88,6 +92,12 @@ class MainActivity : ComponentActivity() {
                         pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                 }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                host.platform.permissionRequests.collect { smsPermission.launch(it) }
             }
         }
 

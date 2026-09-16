@@ -29,6 +29,7 @@ import app.kopeechka.finance.data.splitPayment
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.INBOX_PHOTO
+import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
 import app.kopeechka.finance.data.Receipt
 import app.kopeechka.finance.data.ReceiptScan
@@ -43,6 +44,9 @@ import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.data.Product
 import app.kopeechka.finance.data.Settings
+import app.kopeechka.finance.data.SmsParse
+import app.kopeechka.finance.data.SmsSource
+import app.kopeechka.finance.data.SmsWords
 import app.kopeechka.finance.data.Tx
 import app.kopeechka.finance.data.customerName
 import app.kopeechka.finance.data.nextOrderNo
@@ -74,7 +78,7 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 enum class Tab { HOME, OPS, BUDGET, REPORT, SETTINGS }
-enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS }
+enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS, SMS }
 enum class Kind(val key: String) {
     EXPENSE("kind.expense"),
     INCOME("kind.income"),
@@ -124,6 +128,18 @@ data class CatEdit(
     val limit: String = "",
     val income: Boolean = false,
     val color: String = "",
+)
+
+/** Правило чтения СМС в работе: id пустой — правило новое. */
+data class SmsEdit(
+    val id: String? = null,
+    val name: String = "",
+    val sender: String = "",
+    val accId: String = "",
+    val expenseWords: String = SmsWords.EXPENSE,
+    val incomeWords: String = SmsWords.INCOME,
+    val ignoreWords: String = SmsWords.IGNORE,
+    val auto: Boolean = false,
 )
 
 /** Черновик валюты, которой нет в каталоге. */
@@ -212,6 +228,16 @@ class AppViewModel(
 
     /** Открыт выбор «камера или галерея». */
     var scanSheet by mutableStateOf(false)
+
+    /** Правило чтения СМС, которое сейчас правят. */
+    var smsEdit by mutableStateOf<SmsEdit?>(null)
+
+    /** Текст для проверки правила: видно, что приложение из него достаёт. */
+    var smsTest by mutableStateOf("")
+
+    /** Идёт разбор истории сообщений. */
+    var smsBusy by mutableStateOf(false)
+        private set
 
     /** Черновик, который сейчас правят перед записью. */
     var inboxEdit by mutableStateOf<InboxItem?>(null)
@@ -331,6 +357,7 @@ class AppViewModel(
         when {
             confirm != null -> confirm = null
             inboxEdit != null -> inboxEdit = null
+            smsEdit != null -> smsEdit = null
             scanSheet -> scanSheet = false
             inboxOpen -> inboxOpen = false
             datePick != null -> datePick = null
@@ -1738,6 +1765,12 @@ class AppViewModel(
                 ) + s.txs,
                 nextId = s.nextId + 1,
                 inbox = s.inbox.filterNot { it.id == item.id },
+                // в следующий раз тот же магазин попадёт в ту же категорию сам
+                merchantCats = if (item.source == INBOX_SMS && item.title.isNotBlank()) {
+                    s.merchantCats + (item.title.lowercase() to item.cat)
+                } else {
+                    s.merchantCats
+                },
             )
         }
         inboxEdit = null
@@ -1749,6 +1782,107 @@ class AppViewModel(
         store.update { s -> s.copy(inbox = s.inbox.filterNot { it.id == id }) }
         inboxEdit = null
         if (store.current.inbox.isEmpty()) inboxOpen = false
+    }
+
+    // ——— банковские СМС ———
+
+    val canReadSms get() = platform.canReadSms
+
+    /**
+     * Включение спрашивает разрешение и сразу разбирает историю: иначе человек
+     * настроит правило и будет ждать следующего списания, чтобы понять, работает ли.
+     */
+    fun setSmsModule(on: Boolean) {
+        if (!on) {
+            settings { it.copy(sms = false) }
+            return
+        }
+        viewModelScope.launch {
+            val granted = runCatching { platform.requestSmsAccess() }.getOrDefault(false)
+            if (!granted) return@launch say("sms.denied")
+            settings { it.copy(sms = true) }
+            say("sms.on")
+        }
+    }
+
+    fun openSmsSource(id: String?) {
+        val src = store.current.smsSources.firstOrNull { it.id == id }
+        smsEdit = if (src == null) {
+            SmsEdit(accId = store.current.accounts.firstOrNull()?.id.orEmpty())
+        } else {
+            SmsEdit(src.id, src.name, src.sender, src.accId, src.expenseWords, src.incomeWords, src.ignoreWords, src.auto)
+        }
+        smsTest = ""
+    }
+
+    fun saveSmsSource() {
+        val e = smsEdit ?: return
+        val name = e.name.trim()
+        val sender = e.sender.trim()
+        if (name.isEmpty()) return say("sms.needName")
+        if (sender.isEmpty()) return say("sms.needSender")
+        if (e.accId.isEmpty()) return say("msg.pickAccount")
+        store.update { s ->
+            val src = SmsSource(
+                id = e.id ?: "sms${s.nextId}",
+                name = name,
+                sender = sender,
+                accId = e.accId,
+                expenseWords = e.expenseWords.trim(),
+                incomeWords = e.incomeWords.trim(),
+                ignoreWords = e.ignoreWords.trim(),
+                auto = e.auto,
+            )
+            s.copy(
+                smsSources = if (e.id == null) s.smsSources + src else s.smsSources.map { if (it.id == e.id) src else it },
+                nextId = if (e.id == null) s.nextId + 1 else s.nextId,
+            )
+        }
+        smsEdit = null
+        say("sms.saved")
+    }
+
+    fun askDeleteSmsSource(id: String) {
+        val src = store.current.smsSources.firstOrNull { it.id == id } ?: return
+        confirm = Confirm(l.t("sms.deleteTitle"), l.t("sms.deleteText", src.name), l.t("common.delete")) {
+            store.update { s -> s.copy(smsSources = s.smsSources.filterNot { it.id == id }) }
+            smsEdit = null
+            say("sms.deleted")
+        }
+    }
+
+    fun toggleSmsSource(id: String) = store.update { s ->
+        s.copy(smsSources = s.smsSources.map { if (it.id == id) it.copy(enabled = !it.enabled) else it })
+    }
+
+    /** Что правило вытащит из вставленного текста — проверка без ожидания смски. */
+    fun smsTestResult(): String {
+        val e = smsEdit ?: return ""
+        if (smsTest.isBlank()) return ""
+        val c = calc
+        val src = SmsSource("test", e.name, e.sender, e.accId, e.expenseWords, e.incomeWords, e.ignoreWords)
+        val p = SmsParse.parse(smsTest, src, c.accCur(e.accId)) ?: return l.t("sms.testNothing")
+        val kind = l.t(if (p.income) "kind.income" else "kind.expense")
+        val mask = if (p.mask.isEmpty()) "" else " · ${l.t("sms.testMask", p.mask)}"
+        return l.t("sms.testResult", kind, c.fmt(p.amount, p.cur), p.title) + mask
+    }
+
+    /** Разобрать входящие за последние дни. */
+    fun importSmsHistory(days: Int = 90) {
+        if (smsBusy) return
+        smsBusy = true
+        viewModelScope.launch {
+            try {
+                val granted = runCatching { platform.requestSmsAccess() }.getOrDefault(false)
+                if (!granted) return@launch say("sms.denied")
+                val messages = platform.readSmsHistory(days)
+                val added = SmsInbox.handleAll(store, messages, l)
+                if (added > 0) inboxOpen = true
+                say("sms.imported", added)
+            } finally {
+                smsBusy = false
+            }
+        }
     }
 
     // ——— Google Диск ———

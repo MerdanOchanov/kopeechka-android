@@ -1,22 +1,28 @@
 package app.kopeechka.finance
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.data.SmsMessage
 import app.kopeechka.finance.net.DriveApi
 import app.kopeechka.finance.net.DriveBackup
 import app.kopeechka.finance.work.Schedules
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Что показать системе: сохранить файл с таким именем или открыть существующий. */
@@ -34,10 +40,12 @@ class AndroidPlatform(private val ctx: Context) : Platform {
     val prompts = MutableSharedFlow<FilePrompt>(extraBufferCapacity = 1)
     val authRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
     val imagePrompts = MutableSharedFlow<ImageSource>(extraBufferCapacity = 1)
+    val permissionRequests = MutableSharedFlow<Array<String>>(extraBufferCapacity = 1)
 
     private var pendingFile: CompletableDeferred<Uri?>? = null
     private var pendingAuth: CompletableDeferred<String?>? = null
     private var pendingImage: CompletableDeferred<Uri?>? = null
+    private var pendingPermission: CompletableDeferred<Boolean>? = null
 
     /** Куда камера пишет снимок: файл в кэше, отданный системе через FileProvider. */
     private var cameraTarget: Uri? = null
@@ -181,7 +189,56 @@ class AndroidPlatform(private val ctx: Context) : Platform {
         runCatching { File(ctx.filesDir, "before-restore.json").writeText(json) }
     }
 
+    // ——— банковские СМС ———
+
+    override val canReadSms = true
+
+    override suspend fun requestSmsAccess(): Boolean {
+        if (smsAllowed()) return true
+        val waiter = CompletableDeferred<Boolean>()
+        pendingPermission = waiter
+        permissionRequests.emit(arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS))
+        return waiter.await()
+    }
+
+    fun onPermissionResult(granted: Boolean) {
+        pendingPermission?.complete(granted)
+        pendingPermission = null
+    }
+
+    private fun smsAllowed() =
+        ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Входящие за последние дни. Нужны при включении: правило видно сразу
+     * на настоящих сообщениях, а не после ожидания следующего списания.
+     */
+    override suspend fun readSmsHistory(days: Int): List<SmsMessage> = withContext(Dispatchers.IO) {
+        if (!smsAllowed()) return@withContext emptyList()
+        val since = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        val out = mutableListOf<SmsMessage>()
+        runCatching {
+            ctx.contentResolver.query(
+                Uri.parse("content://sms/inbox"),
+                arrayOf("address", "body", "date"),
+                "date >= ?",
+                arrayOf(since.toString()),
+                "date DESC",
+            )?.use { cur ->
+                while (cur.moveToNext() && out.size < MAX_SMS) {
+                    out += SmsMessage(
+                        sender = cur.getString(0).orEmpty(),
+                        text = cur.getString(1).orEmpty(),
+                        at = cur.getLong(2),
+                    )
+                }
+            }
+        }
+        out
+    }
+
     private companion object {
         const val MAX_SIDE = 1600
+        const val MAX_SMS = 500
     }
 }

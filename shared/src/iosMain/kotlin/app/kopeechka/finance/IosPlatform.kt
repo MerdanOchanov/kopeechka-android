@@ -1,6 +1,7 @@
 package app.kopeechka.finance
 
 import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.data.SmsMessage
 import app.kopeechka.finance.net.DriveApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSBundle
@@ -79,6 +80,18 @@ class IosPlatform(private val storage: IosStorage) : Platform {
     override val canPickImage = true
 
     override suspend fun pickImage(source: ImageSource): PickedImage? = picker.pick(source)
+
+    // ——— банковские СМС ———
+
+    /**
+     * На iOS этого не будет: Apple не даёт приложениям доступ к сообщениям
+     * ни с каким разрешением. Раздел на iPhone просто не показывается.
+     */
+    override val canReadSms = false
+
+    override suspend fun requestSmsAccess() = false
+
+    override suspend fun readSmsHistory(days: Int): List<SmsMessage> = emptyList()
 
     override suspend fun driveToken(): String? = null
 

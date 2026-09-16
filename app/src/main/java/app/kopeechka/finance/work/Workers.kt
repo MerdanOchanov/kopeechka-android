@@ -60,6 +60,29 @@ object Schedules {
         wm.enqueueUniquePeriodicWork(REMIND, ExistingPeriodicWorkPolicy.UPDATE, req)
     }
 
+    /**
+     * Уведомление о новом черновике из СМС. Без него смысл функции теряется:
+     * человек узнает о списании, только когда сам откроет приложение.
+     */
+    fun notifyDraft(ctx: Context, l: Lang, text: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        ensureChannel(ctx, l)
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(l.t("sms.notifyTitle"))
+            .setContentText(text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        runCatching { NotificationManagerCompat.from(ctx).notify(22, n) }
+    }
+
     /** Канал уведомлений называется на языке интерфейса. */
     fun ensureChannel(ctx: Context, l: Lang = Lang.fromSystem()) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
