@@ -125,3 +125,38 @@ adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png
 Эскиз иконки лежит в [`tools/icon-preview.html`](../tools/icon-preview.html) — это тот же
 рисунок, что и в `res/drawable/ic_launcher_foreground.xml`, но в SVG и сразу в нескольких
 масках. Удобно править форму, глядя в браузер, и лишь потом переносить пути в вектор Android.
+
+## Если сборка падает с «Unable to establish loopback connection»
+
+Симптом: любая команда `gradlew` обрывается сразу, а в `--stacktrace` видно
+`java.net.SocketException: Invalid argument: connect` внутри
+`sun.nio.ch.PipeImpl$Initializer$LoopbackConnector`.
+
+Это не Gradle и не Java. `Selector.open()` на Windows открывает служебное
+соединение через Unix-сокет (`WindowsSelectorImpl` явно просит AF_UNIX), а файл
+такого сокета — точка повторного разбора. Если каталог, куда JVM его кладёт,
+этого не позволяет, `bind` проходит, файла нет, и `connect` возвращает
+«Invalid argument». Обычные сетевые соединения при этом работают, поэтому на
+проблему легко подумать на файрвол.
+
+Каталог берётся из `jdk.net.unixdomain.tmpdir`, а по умолчанию — из
+`java.io.tmpdir`, то есть `%TEMP%`. Проверить одной программой:
+
+```java
+var ssc = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
+ssc.bind(null);
+SocketChannel.open(ssc.getLocalAddress());   // здесь и падает
+```
+
+Лечится переносом сокетов в каталог, где они создаются. Свойство нужно **всем**
+процессам сборки — клиенту, демону Gradle и демону Kotlin, — поэтому проще всего
+задать его переменной окружения:
+
+```
+JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\Users\<вы>\.gradle\sockets
+```
+
+Класть его в `org.gradle.jvmargs` пользовательского `~/.gradle/gradle.properties`
+бесполезно: проектный `gradle.properties` эту строку целиком перекрывает.
+Каталог должен существовать. Побочный эффект переменной — строка
+«Picked up JAVA_TOOL_OPTIONS» в выводе каждой Java-программы.
