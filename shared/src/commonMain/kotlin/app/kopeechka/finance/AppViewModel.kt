@@ -44,6 +44,13 @@ import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.data.Product
 import app.kopeechka.finance.data.Settings
+import app.kopeechka.finance.data.Sync
+import app.kopeechka.finance.data.SyncKind
+import app.kopeechka.finance.data.SyncLink
+import app.kopeechka.finance.data.SyncMember
+import app.kopeechka.finance.data.SyncSnapshot
+import app.kopeechka.finance.data.SyncSpace
+import app.kopeechka.finance.data.forSync
 import app.kopeechka.finance.data.SmsParse
 import app.kopeechka.finance.data.SmsSource
 import app.kopeechka.finance.data.SmsWords
@@ -58,6 +65,10 @@ import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.AiImage
 import app.kopeechka.finance.net.AiError
 import app.kopeechka.finance.net.DriveApi
+import app.kopeechka.finance.net.DriveSync
+import app.kopeechka.finance.net.SyncError
+import app.kopeechka.finance.net.SyncTransport
+import app.kopeechka.finance.net.WebDavSync
 import app.kopeechka.finance.net.DriveError
 import app.kopeechka.finance.net.RemoteBackup
 import app.kopeechka.finance.net.formatBackupTime
@@ -73,12 +84,13 @@ import app.kopeechka.finance.data.today
 import app.kopeechka.finance.data.toEpochDay
 import app.kopeechka.finance.data.isoString
 import kotlin.math.abs
+import kotlin.random.Random
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 enum class Tab { HOME, OPS, BUDGET, REPORT, SETTINGS }
-enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS, SMS }
+enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS, SMS, SYNC }
 enum class Kind(val key: String) {
     EXPENSE("kind.expense"),
     INCOME("kind.income"),
@@ -129,6 +141,9 @@ data class CatEdit(
     val income: Boolean = false,
     val color: String = "",
 )
+
+/** Настройки WebDAV в работе. Пароль сюда не попадает — он в хранилище ключей. */
+data class WebDavEdit(val url: String = "", val login: String = "", val password: String = "")
 
 /** Правило чтения СМС в работе: id пустой — правило новое. */
 data class SmsEdit(
@@ -238,6 +253,16 @@ class AppViewModel(
     /** Идёт разбор истории сообщений. */
     var smsBusy by mutableStateOf(false)
         private set
+
+    /** Идёт обмен с другим участником. */
+    var syncBusy by mutableStateOf(false)
+        private set
+
+    /** Код приглашения, который вводят при присоединении. */
+    var joinCode by mutableStateOf("")
+
+    /** Настройки WebDAV открыты. */
+    var webdavEdit by mutableStateOf<WebDavEdit?>(null)
 
     /** Черновик, который сейчас правят перед записью. */
     var inboxEdit by mutableStateOf<InboxItem?>(null)
@@ -357,6 +382,7 @@ class AppViewModel(
         when {
             confirm != null -> confirm = null
             inboxEdit != null -> inboxEdit = null
+            webdavEdit != null -> webdavEdit = null
             smsEdit != null -> smsEdit = null
             scanSheet -> scanSheet = false
             inboxOpen -> inboxOpen = false
@@ -1539,6 +1565,9 @@ class AppViewModel(
 
     private fun keyName(p: String) = "key_$p"
 
+    /** Пароль WebDAV живёт там же, где ключи ИИ: в Keystore или Keychain. */
+    private val WEBDAV_KEY = "webdav_password"
+
     fun openAdvisor(withReport: Boolean = false) {
         advisorOpen = true
         apiKeyInput = secure.get(keyName(store.current.settings.aiProvider))
@@ -1883,6 +1912,161 @@ class AppViewModel(
                 smsBusy = false
             }
         }
+    }
+
+    // ——— общее пространство ———
+
+    val space get() = store.current.space
+
+    /** Код приглашения в читаемом виде: «7F3A-9C2B». */
+    fun inviteCode(): String {
+        val id = space?.id ?: return ""
+        return if (id.length > 4) id.substring(0, 4) + "-" + id.substring(4) else id
+    }
+
+    /**
+     * Завести общее пространство. Слот выбирается случайно: договариваться о нём
+     * двум телефонам негде, а разойтись они должны наверняка — от этого зависит,
+     * не столкнутся ли номера записей.
+     */
+    fun createSpace(name: String) {
+        if (store.current.space != null) return
+        start(randomCode(8), name)
+        say("sync.created")
+    }
+
+    /** Присоединиться по коду от второго участника. */
+    fun joinSpace(name: String) {
+        if (store.current.space != null) return
+        val id = joinCode.trim().uppercase().replace("-", "").replace(" ", "")
+        if (id.length < 6) return say("sync.err.badCode")
+        start(id, name)
+        joinCode = ""
+        say("sync.joined")
+    }
+
+    private fun start(spaceId: String, name: String) {
+        val slot = Random.nextInt(1, 900_000)
+        val meId = randomCode(6)
+        val meName = name.trim().ifBlank { store.current.settings.userName.trim().ifBlank { l.t("sync.meDefault") } }
+        store.update { s ->
+            s.copy(
+                space = SyncSpace(
+                    id = spaceId,
+                    name = l.t("sync.spaceName"),
+                    memberId = meId,
+                    memberName = meName,
+                    slot = slot,
+                    members = listOf(SyncMember(meId, meName, slot)),
+                    links = listOf(SyncLink(SyncKind.DRIVE, enabled = s.settings.driveLinked)),
+                ),
+                // с этого номера начинаются мои записи — чужие сюда не попадут
+                nextId = maxOf(s.nextId, Sync.slotStart(slot)),
+            )
+        }
+    }
+
+    fun leaveSpace() {
+        if (store.current.space == null) return
+        confirm = Confirm(l.t("sync.leaveTitle"), l.t("sync.leaveText"), l.t("sync.leave")) {
+            // данные остаются: уходит только связь с чужим телефоном
+            store.update { it.copy(space = null) }
+            say("sync.left")
+        }
+    }
+
+    fun toggleLink(kind: String) = store.update { s ->
+        val sp = s.space ?: return@update s
+        val has = sp.links.any { it.kind == kind }
+        s.copy(
+            space = sp.copy(
+                links = if (has) sp.links.map { if (it.kind == kind) it.copy(enabled = !it.enabled) else it }
+                else sp.links + SyncLink(kind),
+            ),
+        )
+    }
+
+    fun openWebDav() {
+        val link = store.current.space?.links?.firstOrNull { it.kind == SyncKind.WEBDAV }
+        webdavEdit = WebDavEdit(link?.url.orEmpty(), link?.login.orEmpty(), secure.get(WEBDAV_KEY))
+    }
+
+    fun saveWebDav() {
+        val e = webdavEdit ?: return
+        if (e.url.isBlank()) return say("sync.err.noAddress")
+        secure.put(WEBDAV_KEY, e.password)
+        store.update { s ->
+            val sp = s.space ?: return@update s
+            val link = SyncLink(SyncKind.WEBDAV, e.url.trim().trimEnd('/'), e.login.trim())
+            s.copy(
+                space = sp.copy(
+                    links = if (sp.links.any { it.kind == SyncKind.WEBDAV }) {
+                        sp.links.map { if (it.kind == SyncKind.WEBDAV) link else it }
+                    } else {
+                        sp.links + link
+                    },
+                ),
+            )
+        }
+        webdavEdit = null
+        say("sync.webdavSaved")
+    }
+
+    /**
+     * Обмен: забрать чужие снимки, слить у себя, отправить объединённое.
+     *
+     * Порядок именно такой — отправляем уже слитое, чтобы второй участник за один
+     * заход получил и мои правки, и то, что я узнал от третьего. Повторный запуск
+     * ничего не портит: слияние не зависит ни от порядка, ни от числа повторов.
+     */
+    fun syncNow() {
+        val sp = store.current.space ?: return
+        if (syncBusy) return
+        val transports = transportsFor(sp)
+        if (transports.isEmpty()) return say("sync.err.noLink")
+        syncBusy = true
+        viewModelScope.launch {
+            try {
+                var pulled = 0
+                val now = Clock.System.now().toEpochMilliseconds()
+                transports.forEach { t ->
+                    t.pull(sp.id, sp.memberId).forEach { snap ->
+                        store.applyMerged(Sync.merge(store.current, snap.data, now))
+                        pulled++
+                    }
+                }
+                val out = SyncSnapshot(sp.id, sp.memberId, sp.memberName, now, store.current.forSync())
+                transports.forEach { it.push(out) }
+                store.update { s ->
+                    s.copy(space = s.space?.copy(syncedAt = now))
+                }
+                say(if (pulled > 0) "sync.done" else "sync.doneAlone", pulled)
+            } catch (e: SyncError) {
+                say(e.key, *e.args.toTypedArray())
+            } catch (e: DriveAuthError) {
+                say("msg.driveAuthError", e.code)
+            } catch (e: Exception) {
+                flash(e.message ?: l.t("sync.err.offline"))
+            } finally {
+                syncBusy = false
+            }
+        }
+    }
+
+    private fun transportsFor(sp: SyncSpace): List<SyncTransport> = sp.links.filter { it.enabled }.mapNotNull { link ->
+        when (link.kind) {
+            SyncKind.DRIVE -> DriveSync { platform.driveToken() }
+            SyncKind.WEBDAV -> if (link.url.isBlank()) null else WebDavSync(link, secure.get(WEBDAV_KEY))
+            else -> null
+        }
+    }
+
+    /** Возможные дубли после обмена: двое записали одну покупку. */
+    fun duplicatePairs() = Sync.duplicates(store.current)
+
+    private fun randomCode(len: Int): String {
+        val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        return (1..len).map { alphabet[Random.nextInt(alphabet.length)] }.joinToString("")
     }
 
     // ——— Google Диск ———

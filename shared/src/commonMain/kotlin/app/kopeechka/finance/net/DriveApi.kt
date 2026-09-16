@@ -59,6 +59,9 @@ object DriveApi {
     /** Имя папки на Диске берётся из языка интерфейса. */
     var folderName: String = "Kopeechka"
 
+    /** Подпапка общего пространства: копии и обмен не должны перемешиваться. */
+    var sharedFolderName: String = "Kopeechka Together"
+
     private const val FOLDER_MIME = "application/vnd.google-apps.folder"
     private const val API = "https://www.googleapis.com/drive/v3/files"
     private const val UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
@@ -132,11 +135,79 @@ object DriveApi {
         }
     }
 
-    private suspend fun folderId(token: String, create: Boolean): String? {
+    /**
+     * Положить файл с этим именем, заменив прежний.
+     *
+     * Для обмена между двумя телефонами это главное отличие от копий: у каждого
+     * участника один файл, который переписывается, а не копится десятками.
+     */
+    suspend fun putNamed(token: String, folder: String, name: String, content: String): String {
+        val dir = folderId(token, create = true, name = folder)!!
+        val id = findId(token, dir, name) ?: run {
+            val meta = buildJsonObject {
+                put("name", name)
+                put("mimeType", "application/json")
+                put("parents", buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive(dir)) })
+            }
+            val created = parse(
+                check(
+                    send(token, HttpMethod.Post, "$API?fields=id") {
+                        contentType(ContentType.Application.Json)
+                        setBody(meta.toString())
+                    },
+                ),
+            )
+            created["id"]!!.jsonPrimitive.content
+        }
+        check(
+            send(token, HttpMethod.Patch, "$UPLOAD/$id?uploadType=media") {
+                contentType(ContentType.Application.Json)
+                setBody(content)
+            },
+        )
+        return id
+    }
+
+    /** Файлы в подпапке: имя и идентификатор. Для обмена нужны чужие снимки. */
+    suspend fun listNamed(token: String, folder: String): List<RemoteBackup> {
+        val dir = folderId(token, create = false, name = folder) ?: return emptyList()
+        val obj = parse(
+            check(
+                send(token, HttpMethod.Get, API) {
+                    parameter("q", "'$dir' in parents and trashed=false")
+                    parameter("fields", "files(id,name,modifiedTime,size)")
+                    parameter("pageSize", "50")
+                },
+            ),
+        )
+        return obj["files"]?.jsonArray?.map { f ->
+            val o = f.jsonObject
+            RemoteBackup(
+                id = o["id"]!!.jsonPrimitive.content,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                createdIso = o["modifiedTime"]?.jsonPrimitive?.contentOrNull ?: "",
+                size = o["size"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+            )
+        } ?: emptyList()
+    }
+
+    private suspend fun findId(token: String, dir: String, name: String): String? {
+        val obj = parse(
+            check(
+                send(token, HttpMethod.Get, API) {
+                    parameter("q", "'$dir' in parents and name='$name' and trashed=false")
+                    parameter("fields", "files(id)")
+                },
+            ),
+        )
+        return obj["files"]?.jsonArray?.firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.content
+    }
+
+    private suspend fun folderId(token: String, create: Boolean, name: String = folderName): String? {
         val found = parse(
             check(
                 send(token, HttpMethod.Get, API) {
-                    parameter("q", "name='$folderName' and mimeType='$FOLDER_MIME' and trashed=false")
+                    parameter("q", "name='$name' and mimeType='$FOLDER_MIME' and trashed=false")
                     parameter("fields", "files(id)")
                 },
             ),
@@ -144,7 +215,7 @@ object DriveApi {
         found["files"]?.jsonArray?.firstOrNull()?.let { return it.jsonObject["id"]!!.jsonPrimitive.content }
         if (!create) return null
         val meta = buildJsonObject {
-            put("name", folderName)
+            put("name", name)
             put("mimeType", FOLDER_MIME)
         }
         val made = parse(

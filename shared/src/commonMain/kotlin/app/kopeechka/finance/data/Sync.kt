@@ -23,10 +23,28 @@ data class SyncSpace(
     val members: List<SyncMember> = emptyList(),
     /** Когда последний раз обменивались, миллисекунды. */
     val syncedAt: Long = 0,
+    /** Через что обмениваемся: облако, чужой сервер, сеть. Можно сразу несколько. */
+    val links: List<SyncLink> = emptyList(),
 )
 
 @Serializable
 data class SyncMember(val id: String, val name: String, val slot: Int)
+
+/** Через что обмениваемся. Пароль WebDAV лежит не здесь, а в хранилище ключей. */
+@Serializable
+data class SyncLink(
+    val kind: String,
+    /** Адрес папки для WebDAV; для остальных пусто. */
+    val url: String = "",
+    val login: String = "",
+    val enabled: Boolean = true,
+)
+
+object SyncKind {
+    const val DRIVE = "drive"
+    const val WEBDAV = "webdav"
+    const val LAN = "lan"
+}
 
 /** Снимок для обмена: чьё состояние и когда снято. */
 @Serializable

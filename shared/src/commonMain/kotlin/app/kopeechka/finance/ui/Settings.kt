@@ -213,6 +213,18 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             }
         }
 
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("sync.title"))
+            Muted(l.t("sync.settingsNote"), 11.5f, color = col.n700)
+            SecondaryButton(
+                if (c.d.space == null) l.t("sync.openPage") else l.t("sync.openPageOn"),
+                { vm.openPage(Page.SYNC) },
+                Modifier.fillMaxWidth(),
+                size = 13,
+                upper = true,
+            )
+        }
+
         if (vm.canReadSms) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionTitle(l.t("sms.title"))

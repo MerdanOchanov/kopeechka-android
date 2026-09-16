@@ -20,6 +20,13 @@ interface Storage {
     fun update(f: (AppData) -> AppData)
     fun replace(d: AppData)
 
+    /**
+     * Записать состояние как есть, без отметок времени.
+     * Нужно слиянию: чужие правки приходят со своим временем, и переставлять
+     * его на своё — значит объявить их новее всего на свете.
+     */
+    fun applyMerged(d: AppData)
+
     /** Состояние в JSON — уходит в резервную копию. */
     fun exportJson(): String
 

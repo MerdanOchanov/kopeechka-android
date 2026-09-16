@@ -38,6 +38,15 @@ class Store(context: Context) : app.kopeechka.finance.Storage {
 
     override fun replace(d: AppData) = update { d }
 
+    override fun applyMerged(d: AppData) {
+        synchronized(lock) {
+            Currencies.setLang(Lang.of(d.settings.lang))
+            Currencies.registerCustom(d.settings.customCurrencies)
+            _data.value = d
+            persist(d)
+        }
+    }
+
     override fun exportJson(): String = json.encodeToString(AppData.serializer(), current.forExport())
 
     /** Бросает исключение, если JSON не похож на копию «Копеечки». */

@@ -51,6 +51,13 @@ class IosStorage : Storage {
 
     override fun replace(d: AppData) = update { d }
 
+    override fun applyMerged(d: AppData) {
+        Currencies.setLang(Lang.of(d.settings.lang))
+        Currencies.registerCustom(d.settings.customCurrencies)
+        _data.value = d
+        persist(d)
+    }
+
     override fun exportJson(): String = json.encodeToString(AppData.serializer(), current.forExport())
 
     override fun parseBackup(text: String): AppData {
