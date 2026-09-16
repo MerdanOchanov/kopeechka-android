@@ -55,6 +55,13 @@ kotlin {
     }
 }
 
+// Без этого зелёная сборка не отличается от сборки, где тестов не нашлось
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("passed", "failed", "skipped")
+    }
+}
+
 dependencies {
     implementation(project(":shared"))
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
