@@ -394,6 +394,7 @@ internal val EN_STRINGS: Map<String, String> = mapOf(
     "inbox.fromSms" to "from SMS",
     "inbox.waiting" to "To review · {0}",
     "inbox.scan" to "Scan receipt",
+    "inbox.scanHint" to "take or pick a photo",
     "inbox.scanning" to "Reading the receipt…",
     "inbox.scanTitle" to "Scan receipt",
     "inbox.scanNote" to "The photo goes to your AI provider, which reads the total, the shop and the date. Recording stays manual, after you check it.",

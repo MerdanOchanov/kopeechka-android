@@ -398,6 +398,7 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "inbox.fromSms" to "SMS-den",
     "inbox.waiting" to "Barlaga · {0}",
     "inbox.scan" to "Çegi surata düş",
+    "inbox.scanHint" to "surata düş ýa-da saýla",
     "inbox.scanning" to "Çek okalýar…",
     "inbox.scanTitle" to "Çegi surata düş",
     "inbox.scanNote" to "Surat saýlanan AI-hyzmatyna gider: ol möçberi, dükany we senäni okar. Amal diňe siz barlanyňyzdan soň ýazylar.",

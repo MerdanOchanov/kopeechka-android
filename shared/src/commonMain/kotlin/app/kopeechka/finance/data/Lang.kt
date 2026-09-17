@@ -478,6 +478,7 @@ internal val RU_STRINGS: Map<String, String> = mapOf(
     "inbox.fromSms" to "из СМС",
     "inbox.waiting" to "На проверку · {0}",
     "inbox.scan" to "Чек по фото",
+    "inbox.scanHint" to "снять или выбрать фото",
     "inbox.scanning" to "Читаю чек…",
     "inbox.scanTitle" to "Чек по фото",
     "inbox.scanNote" to "Снимок уйдёт выбранному ИИ-провайдеру: он прочитает сумму, магазин и дату. Записать операцию можно будет только вручную, после проверки.",

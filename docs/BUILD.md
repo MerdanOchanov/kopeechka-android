@@ -56,16 +56,25 @@ cd iosApp && xcodegen generate && open Kopeechka.xcodeproj
 
 ## Сборка
 
+У приложения два варианта: `full` — со всеми функциями, для GitHub и своего телефона,
+и `play` — для Google Play, без чтения СМС (почему — в [PLAY.md](PLAY.md)).
+
 ```bash
-gradlew.bat assembleDebug
+gradlew.bat :app:assembleFullDebug
 ```
 
-Готовый файл: `app/build/outputs/apk/debug/app-debug.apk`.
+Готовый файл: `app/build/outputs/apk/full/debug/app-full-debug.apk`.
 
-Установка на подключённый телефон с включённой отладкой по USB:
+Установка на телефон с включённой отладкой по USB или по Wi-Fi:
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
+```
+
+Тесты слияния:
+
+```bash
+gradlew.bat :app:testFullDebugUnitTest
 ```
 
 ## Известная особенность Windows
@@ -89,30 +98,17 @@ gradlew.bat assembleDebug
 
 ## Release-сборка
 
-1. Создайте ключ (храните файл и пароль надёжно — без него не выпустить обновление):
+Подпись, ключ загрузки и выпуск в Google Play описаны в [PLAY.md](PLAY.md).
+Коротко: ключ лежит вне репозитория, путь и пароль — в `keystore.properties`
+(в `.gitignore`), сборка для Play — `gradlew.bat :app:bundlePlayRelease`.
 
-```bash
-keytool -genkeypair -v -keystore kopeechka-release.jks -alias kopeechka -keyalg RSA -keysize 4096 -validity 10000
-```
-
-2. Положите рядом `keystore.properties` (он в `.gitignore`):
-
-```
-storeFile=../kopeechka-release.jks
-storePassword=…
-keyAlias=kopeechka
-keyPassword=…
-```
-
-3. Добавьте в `app/build.gradle.kts` `signingConfigs` и подключите его к `release`,
-   затем соберите `gradlew.bat assembleRelease` или `bundleRelease` для Google Play.
-
-4. SHA-1 нового ключа добавьте вторым Android-клиентом в Google Cloud, иначе
-   резервные копии на Диск перестанут авторизоваться — см. [GOOGLE_DRIVE.md](GOOGLE_DRIVE.md).
+SHA-1 ключа, которым подписано приложение у пользователя, нужно добавить
+Android-клиентом OAuth в Google Cloud, иначе Диск не авторизуется —
+см. [GOOGLE_DRIVE.md](GOOGLE_DRIVE.md).
 
 ## Проверка на устройстве
 
-Специальных тестов нет; проверка ручная. Полезные команды:
+Слияние общего бюджета покрыто тестами (запускаются в CI), остальное проверяется руками. Полезные команды:
 
 ```bash
 adb logcat -c && adb shell am start -n app.kopeechka.finance/.MainActivity

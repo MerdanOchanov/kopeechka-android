@@ -1,10 +1,17 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+// Ключ загрузки для Google Play лежит вне репозитория; без файла собирается всё, кроме подписанного релиза
+val uploadKey = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -15,13 +22,40 @@ android {
         applicationId = "app.kopeechka.finance"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
+    }
+
+    signingConfigs {
+        if (uploadKey.getProperty("storeFile") != null) {
+            create("upload") {
+                storeFile = file(uploadKey.getProperty("storeFile"))
+                storePassword = uploadKey.getProperty("storePassword")
+                keyAlias = uploadKey.getProperty("keyAlias")
+                keyPassword = uploadKey.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("upload")
+        }
+    }
+
+    // full — сборка для GitHub со всеми функциями.
+    // play — для Google Play: без чтения СМС. Разрешения на SMS Play пропускает
+    // только после одобрения отдельной декларации, а без неё выпуск не пройдёт проверку.
+    flavorDimensions += "store"
+    productFlavors {
+        create("full") {
+            dimension = "store"
+            buildConfigField("boolean", "SMS_ENABLED", "true")
+        }
+        create("play") {
+            dimension = "store"
+            buildConfigField("boolean", "SMS_ENABLED", "false")
         }
     }
 

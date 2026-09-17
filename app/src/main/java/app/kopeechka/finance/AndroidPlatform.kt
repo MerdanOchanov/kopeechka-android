@@ -191,9 +191,11 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     // ——— банковские СМС ———
 
-    override val canReadSms = true
+    /** В сборке для Google Play чтения СМС нет — см. app/build.gradle.kts. */
+    override val canReadSms = BuildConfig.SMS_ENABLED
 
     override suspend fun requestSmsAccess(): Boolean {
+        if (!canReadSms) return false
         if (smsAllowed()) return true
         val waiter = CompletableDeferred<Boolean>()
         pendingPermission = waiter

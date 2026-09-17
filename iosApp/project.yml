@@ -16,8 +16,8 @@ targets:
       path: Kopeechka/Info.plist
       properties:
         CFBundleDisplayName: Копеечка
-        CFBundleShortVersionString: "1.7"
-        CFBundleVersion: "8"
+        CFBundleShortVersionString: "1.8"
+        CFBundleVersion: "9"
         UILaunchScreen: {}
         # Без этих пояснений iOS не пустит к камере и галерее — их видит человек в запросе доступа
         NSCameraUsageDescription: Чтобы снять чек и разобрать его сумму

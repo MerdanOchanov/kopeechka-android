@@ -1,13 +1,14 @@
 # Копеечка
 
-Учёт личных финансов для Android: счета в разных валютах, бюджеты, отчёты, цели,
-резервные копии в собственный Google Диск и ИИ-советник по своим данным.
-Всё хранится на телефоне — сервера у приложения нет.
+Учёт личных и семейных финансов: счета в разных валютах, бюджеты, отчёты, цели,
+общий бюджет на двоих, чеки по фото, резервные копии в собственный Google Диск
+и ИИ-советник по своим данным. Всё хранится на телефоне — сервера у приложения нет.
 
 Kotlin Multiplatform · Compose Multiplatform · Android 8.0+ и iOS 15+ · без аналитики и рекламы.
 
 **[Скачать APK последней сборки](https://github.com/MerdanOchanov/kopeechka-android/releases/latest)** —
-тестовая сборка, подписана отладочным ключом. Резервные копии в Google Диск заработают
+тестовая сборка со всеми функциями, подписана отладочным ключом. Версия для Google Play
+выходит без чтения СМС и поверх этой сборки не устанавливается (см. [docs/PLAY.md](docs/PLAY.md)). Резервные копии в Google Диск заработают
 только у аккаунтов, добавленных в тестировщики OAuth-клиента (см. [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md));
 всё остальное работает без интернета.
 
@@ -28,7 +29,21 @@ Kotlin Multiplatform · Compose Multiplatform · Android 8.0+ и iOS 15+ · бе
 - Курс пары можно поправить прямо в окне операции — удобно, когда обменял по своему курсу.
 - Обмен через CSV: выгрузка за неделю, месяц, квартал, год или целиком и загрузка по шаблону
   (неизвестные счета и категории создаются сами).
-- Цели и накопления: «отложить» списывает сумму со счёта и двигает прогресс цели.
+- Цели и накопления: «отложить» списывает сумму со счёта и двигает прогресс цели;
+  сумму можно выбрать из готовых или ввести свою.
+
+**Вместе**
+- Общий бюджет на двоих: два телефона ведут одни счета и операции.
+- Обмен через общий аккаунт Google, WebDAV (Яндекс.Диск, Nextcloud) или напрямую по Wi-Fi.
+- Записи сливаются без потерь: побеждает более поздняя правка, удалённое не возвращается,
+  у каждой операции есть автор, похожие покупки от двоих показываются как дубли.
+- Заявки на расход: с общего счёта от порога трата ждёт одобрения второго — см. [docs/SYNC.md](docs/SYNC.md).
+
+**Без ручного ввода**
+- Чеки по фото: ИИ-провайдер по вашему ключу читает магазин, дату, сумму и позиции.
+- Банковские СМС (сборка с GitHub): правила по отправителю, привязка к счёту и маске карты,
+  проверка правила на настоящей смске, разбор истории за 90 дней.
+- И чек, и смска попадают «На проверку» — в деньги ничего не пишется без вашего подтверждения.
 
 **Долги**
 - Дать или взять в долг — прямо на экране новой операции: кому, сколько, когда вернуть и сколько вернётся.
@@ -81,13 +96,16 @@ Kotlin Multiplatform · Compose Multiplatform · Android 8.0+ и iOS 15+ · бе
 | [docs/AI_ADVISOR.md](docs/AI_ADVISOR.md) | провайдеры, ключи, что именно уходит в запрос |
 | [docs/BUSINESS.md](docs/BUSINESS.md) | заказы, клиенты, прайс: как считаются выручка и прибыль |
 | [docs/DEBTS.md](docs/DEBTS.md) | долги: почему тело долга не расход и как считается заработок |
+| [docs/SYNC.md](docs/SYNC.md) | общий бюджет: слияние, способы обмена, заявки на расход |
+| [docs/PLAY.md](docs/PLAY.md) | варианты сборки, ключ загрузки, выпуск в Google Play |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | политика конфиденциальности |
 | [CHANGELOG.md](CHANGELOG.md) | что менялось |
 
 ## Быстрый старт
 
 ```bash
-gradlew.bat assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+gradlew.bat :app:assembleFullDebug
+adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
 ```
 
 Нужны JDK 17+ и Android SDK (platform 35, build-tools 35.0.0); путь к SDK — в `local.properties`.
@@ -104,16 +122,21 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 shared/src/commonMain/    общий код — данные, расчёты, языки, сеть и весь интерфейс
   data/    Model.kt · Calc.kt · Business.kt · Debts.kt · Csv.kt · Currencies.kt
+           Sync.kt (слияние) · Requests.kt · Inbox.kt (чеки, черновики) · Sms.kt
            Dates.kt · Format.kt · Palette.kt · Demo.kt · Lang*.kt
   net/     Ai.kt (Claude, OpenAI, Gemini, свой endpoint) · DriveApi.kt · Http.kt
+           SyncTransport.kt (Google Диск, WebDAV, Wi-Fi)
   ui/      Root.kt · Screens.kt · Overlays.kt · Settings.kt · Business.kt
-           Debts.kt · DateSheet.kt · Components.kt · Icons.kt · theme/
-  AppViewModel.kt · Ports.kt (границы с платформой)
+           Debts.kt · SyncPage.kt · Requests.kt · Inbox.kt · Sms.kt
+           DateSheet.kt · Components.kt · Icons.kt · theme/
+  AppViewModel.kt · Ports.kt (границы с платформой) · SmsInbox.kt
 
 shared/src/androidMain/   движок HTTP и шрифты с запасным семейством для кириллицы
 shared/src/iosMain/       файл данных, Keychain, уведомления, точка входа Compose
 
-app/                      Android: точка входа, реализации портов, фоновые задачи
+app/                      Android: точка входа, реализации портов, фоновые задачи,
+                          приём СМС, сервер обмена по Wi-Fi, тесты слияния
+  src/play/               манифест варианта для Google Play (без СМС)
 iosApp/                   iOS: SwiftUI-обёртка и project.yml для XcodeGen
 tools/                    icon-preview.html — эскиз иконки в браузере
 ```

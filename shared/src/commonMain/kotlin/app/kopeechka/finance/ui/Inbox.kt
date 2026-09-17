@@ -130,36 +130,50 @@ fun ScanSourceSheet(vm: AppViewModel) {
     }
 }
 
-/** Полоска на главной: сколько черновиков ждёт и кнопка снять чек. */
+/**
+ * Полоски на главной: сколько черновиков ждёт и «чек по фото».
+ * Одна колонка, а не два соседа: иначе ScreenColumn ставит лишний отступ между ними.
+ */
 @Composable
 fun InboxBar(vm: AppViewModel, c: Calc) {
     val col = T.c
     val l = T.l
     val waiting = c.d.inbox.size
-    if (waiting == 0 && !vm.canScan()) return
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val scan = vm.canScan()
+    if (waiting == 0 && !scan) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (waiting > 0) {
-            Row(
-                Modifier
-                    .weight(1f)
-                    .background(col.surface)
-                    .hairline(col.accent)
-                    .tap { vm.inboxOpen = true }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(l.t("inbox.waiting", l.n(waiting, "draft")).uppercase(), style = T.h(11.sp, col.accent, 0.1.em), maxLines = 1)
-                Spacer(Modifier.weight(1f))
-                Text("→", style = T.h(13.sp, col.accent))
-            }
-        } else {
-            Spacer(Modifier.weight(1f))
+            BarRow(
+                l.t("inbox.waiting", l.n(waiting, "draft")),
+                "→",
+                strong = true,
+            ) { vm.inboxOpen = true }
         }
-        if (vm.canScan()) {
-            Box(Modifier.width(if (waiting > 0) 120.dp else 160.dp)) {
-                GhostButton(if (vm.scanning) l.t("inbox.scanning") else l.t("inbox.scan"), { if (!vm.scanning) vm.scanSheet = true }, size = 12)
-            }
+        if (scan) {
+            BarRow(
+                if (vm.scanning) l.t("inbox.scanning") else l.t("inbox.scan"),
+                if (vm.scanning) "" else l.t("inbox.scanHint"),
+                strong = false,
+            ) { if (!vm.scanning) vm.scanSheet = true }
         }
     }
-    Spacer(Modifier.height(2.dp))
+}
+
+/** Строка-кнопка во всю ширину: подпись слева, подсказка справа. */
+@Composable
+private fun BarRow(title: String, hint: String, strong: Boolean, onClick: () -> Unit) {
+    val col = T.c
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(col.surface)
+            .hairline(if (strong) col.accent else col.divider)
+            .tap(onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title.uppercase(), style = T.h(11.sp, if (strong) col.accent else col.a700, 0.1.em), maxLines = 1)
+        Spacer(Modifier.weight(1f))
+        if (hint.isNotEmpty()) Text(hint, style = T.b(11.sp, col.n600), maxLines = 1)
+    }
 }
