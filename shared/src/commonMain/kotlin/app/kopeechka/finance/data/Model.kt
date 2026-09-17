@@ -16,6 +16,10 @@ data class Account(
     /** Стартовый остаток в валюте счёта. Текущий баланс = initial + сумма операций. */
     val initial: Double = 0.0,
     val inTotal: Boolean = true,
+    /** Общий счёт: расходы с него от порога спрашивают согласия второго участника. */
+    val shared: Boolean = false,
+    /** С какой суммы спрашивать, в валюте счёта. 0 — всегда. */
+    val approveFrom: Double = 0.0,
     /** Когда запись меняли, миллисекунды. Нужна слиянию: см. Sync. */
     val changedAt: Long = 0,
 )
@@ -132,6 +136,8 @@ data class AppData(
     val products: List<Product> = emptyList(),
     val customers: List<Customer> = emptyList(),
     val orders: List<Order> = emptyList(),
+    /** Заявки на расход с общих счетов. */
+    val requests: List<SpendRequest> = emptyList(),
     /** Общее пространство с другим человеком; null — веду один. */
     val space: SyncSpace? = null,
     /**

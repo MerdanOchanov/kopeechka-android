@@ -445,6 +445,20 @@ fun AccEditOverlay(vm: AppViewModel, c: Calc, e: AccEdit) {
             note = if (e.id != null) l.t("acc.balanceNote") else null,
         )
         SettingRow(l.t("acc.inTotalToggle")) { Toggle(e.inTotal) { vm.accEdit = e.copy(inTotal = it) } }
+        // общий счёт имеет смысл, только когда есть с кем его делить
+        if (c.d.space != null) {
+            SettingRow(l.t("req.sharedToggle"), l.t("req.sharedSub")) { Toggle(e.shared) { vm.accEdit = e.copy(shared = it) } }
+            if (e.shared) {
+                Field(
+                    l.t("req.threshold", Currencies.sym(e.cur)),
+                    e.approveFrom,
+                    { vm.accEdit = e.copy(approveFrom = it) },
+                    numeric = true,
+                    placeholder = "0",
+                    note = l.t("req.thresholdNote"),
+                )
+            }
+        }
         if (e.id != null) DangerButton(l.t("acc.delete"), { vm.askDeleteAcc(e.id) })
     }
 }

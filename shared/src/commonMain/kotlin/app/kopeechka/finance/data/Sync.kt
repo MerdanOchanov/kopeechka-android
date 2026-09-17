@@ -101,6 +101,13 @@ object Sync {
         val products = stampList(before.products, after.products, now, tombs, "prod", { it.id }) { it.copy(changedAt = now) }
         val customers = stampList(before.customers, after.customers, now, tombs, "cust", { it.id }) { it.copy(changedAt = now) }
         val orders = stampList(before.orders, after.orders, now, tombs, "order", { it.id.toString() }) { it.copy(changedAt = now) }
+        val requests = stampList(before.requests, after.requests, now, tombs, "req", { it.id.toString() }) { it.copy(changedAt = now) }
+
+        // новая операция без автора — значит, её записали на этом телефоне;
+        // пришедшие при обмене сюда не попадают, они пишутся мимо stamp
+        val me = after.space?.memberId.orEmpty()
+        val known = before.txs.mapTo(HashSet()) { it.id }
+        val authored = if (me.isEmpty()) txs else txs.map { if (it.by.isEmpty() && it.id !in known) it.copy(by = me) else it }
 
         val moneyChanged = moneyOf(before.settings) != moneyOf(after.settings)
         val settings = if (moneyChanged) after.settings.copy(moneyAt = now) else after.settings
@@ -108,12 +115,13 @@ object Sync {
         return after.copy(
             accounts = accounts,
             categories = categories,
-            txs = txs,
+            txs = authored,
             goals = goals,
             debts = debts,
             products = products,
             customers = customers,
             orders = orders,
+            requests = requests,
             settings = settings,
             deleted = prune(tombs, now),
         )
@@ -137,6 +145,7 @@ object Sync {
             products = mergeList(mine.products, theirs.products, deleted, "prod", { it.id }, { it.changedAt }),
             customers = mergeList(mine.customers, theirs.customers, deleted, "cust", { it.id }, { it.changedAt }),
             orders = mergeList(mine.orders, theirs.orders, deleted, "order", { it.id.toString() }, { it.changedAt }),
+            requests = mergeList(mine.requests, theirs.requests, deleted, "req", { it.id.toString() }, { it.changedAt }),
             // чужой счётчик тоже двигаем: слоты разные, но пусть номера не отстают
             nextId = maxOf(mine.nextId, theirs.nextId),
             settings = mergeMoney(mine.settings, theirs.settings),

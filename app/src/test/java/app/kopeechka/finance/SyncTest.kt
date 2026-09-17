@@ -5,7 +5,12 @@ import app.kopeechka.finance.data.AppData
 import app.kopeechka.finance.data.Category
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
+import app.kopeechka.finance.data.RequestStatus
 import app.kopeechka.finance.data.Settings
+import app.kopeechka.finance.data.SpendRequest
+import app.kopeechka.finance.data.SyncMember
+import app.kopeechka.finance.data.SyncSpace
+import app.kopeechka.finance.data.needsApproval
 import app.kopeechka.finance.data.SmsSource
 import app.kopeechka.finance.data.Sync
 import app.kopeechka.finance.data.Tx
@@ -152,5 +157,47 @@ class SyncTest {
 
         val same = base().copy(txs = listOf(tx(1001, "продукты", -100.0, t0, by = "a"), tx(1002, "продукты", -100.0, t0, by = "a")))
         assertTrue(Sync.duplicates(same).isEmpty(), "две свои одинаковые записи — дело хозяйское")
+    }
+
+    private fun space(me: String, members: Int = 2) = SyncSpace(
+        id = "SPACE1",
+        name = "Общий",
+        memberId = me,
+        memberName = me,
+        slot = 1,
+        members = (1..members).map { SyncMember(if (it == 1) me else "other$it", "имя$it", it) },
+    )
+
+    @Test
+    fun новая_операция_подписывается_автором_а_старые_нет() {
+        val before = base().copy(space = space("me"), txs = listOf(tx(1001, "старая", -10.0, t0, by = "")))
+        val after = Sync.stamp(before, before.copy(txs = before.txs + tx(1002, "новая", -20.0, 0, by = "")), t0 + 100)
+
+        assertEquals("me", after.txs.first { it.id == 1002L }.by)
+        assertEquals("", after.txs.first { it.id == 1001L }.by, "задним числом авторство не приписываем")
+    }
+
+    @Test
+    fun решение_по_заявке_доезжает_до_автора() {
+        val req = SpendRequest(id = 5001, by = "a", accId = "acc1", amount = 300.0, cat = "food", title = "продукты", date = 20000, changedAt = t0)
+        val mine = base().copy(requests = listOf(req))
+        val theirs = base().copy(
+            requests = listOf(req.copy(status = RequestStatus.APPROVED, decidedBy = "b", decidedAt = t0 + 50, changedAt = t0 + 50)),
+        )
+
+        assertEquals(RequestStatus.APPROVED, Sync.merge(mine, theirs, t0 + 100).requests.single().status)
+        assertEquals(RequestStatus.APPROVED, Sync.merge(theirs, mine, t0 + 100).requests.single().status)
+    }
+
+    @Test
+    fun согласие_спрашивается_только_с_общего_счёта_от_порога_и_при_втором_участнике() {
+        val acc = Account(id = "acc1", name = "Общая", shared = true, approveFrom = 500.0)
+        val d = AppData(accounts = listOf(acc), space = space("me"))
+
+        assertTrue(d.needsApproval("acc1", 500.0))
+        assertTrue(!d.needsApproval("acc1", 499.0), "ниже порога — пишется сразу")
+        assertTrue(!d.copy(accounts = listOf(acc.copy(shared = false))).needsApproval("acc1", 1000.0), "личный счёт")
+        assertTrue(!d.copy(space = space("me", members = 1)).needsApproval("acc1", 1000.0), "второго ещё нет — спрашивать некого")
+        assertTrue(!d.copy(space = null).needsApproval("acc1", 1000.0))
     }
 }

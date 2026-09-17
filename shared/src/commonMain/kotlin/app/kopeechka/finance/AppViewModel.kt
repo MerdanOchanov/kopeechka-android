@@ -43,7 +43,10 @@ import app.kopeechka.finance.data.OrderStatus
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.data.Product
+import app.kopeechka.finance.data.RequestStatus
 import app.kopeechka.finance.data.Settings
+import app.kopeechka.finance.data.SpendRequest
+import app.kopeechka.finance.data.needsApproval
 import app.kopeechka.finance.data.Sync
 import app.kopeechka.finance.data.SyncKind
 import app.kopeechka.finance.data.SyncLink
@@ -135,6 +138,8 @@ data class AccEdit(
     val cur: String = "RUB",
     val balance: String = "",
     val inTotal: Boolean = true,
+    val shared: Boolean = false,
+    val approveFrom: String = "",
 )
 
 data class CatEdit(
@@ -268,6 +273,9 @@ class AppViewModel(
     /** Настройки WebDAV открыты. */
     var webdavEdit by mutableStateOf<WebDavEdit?>(null)
 
+    /** Открыт список заявок. */
+    var requestsOpen by mutableStateOf(false)
+
     /** Адрес, по которому этот телефон сейчас принимает обмен; null — не принимает. */
     var lanHostAddress by mutableStateOf<String?>(null)
         private set
@@ -374,6 +382,7 @@ class AppViewModel(
 
     init {
         val s = store.current.settings
+        settleRequests()
         platform.onLanguageChanged(l)
         platform.syncReminder(s.remind, s.remindHour)
         platform.syncAutoBackup(s.autoBackup && s.driveLinked)
@@ -400,6 +409,7 @@ class AppViewModel(
         when {
             confirm != null -> confirm = null
             inboxEdit != null -> inboxEdit = null
+            requestsOpen -> requestsOpen = false
             webdavEdit != null -> webdavEdit = null
             smsEdit != null -> smsEdit = null
             scanSheet -> scanSheet = false
@@ -580,6 +590,10 @@ class AppViewModel(
             Kind.EXPENSE -> {
                 if (!c.s.allowNegative && c.balance(src) - old < v) {
                     return say("msg.notEnoughHint", src.name, c.fmt(v - (c.balance(src) - old), src.cur))
+                }
+                // с общего счёта от порога — не операция, а просьба ко второму участнику
+                if (d.editId == null && store.current.needsApproval(src.id, v)) {
+                    return askApproval(d, v, src)
                 }
                 Tx(id, d.date, d.note.trim().ifBlank { c.cat(d.cat).name }, d.cat, src.id, -v)
             }
@@ -795,7 +809,10 @@ class AppViewModel(
 
     fun openAccEdit(a: Account?) {
         accEdit = if (a == null) AccEdit(cur = store.current.settings.mainCur, type = l.t("acc.type.card"))
-        else AccEdit(a.id, a.name, a.type, a.mask, a.cur, calc.balance(a).roundToLong().toString(), a.inTotal)
+        else AccEdit(
+            a.id, a.name, a.type, a.mask, a.cur, calc.balance(a).roundToLong().toString(), a.inTotal,
+            a.shared, if (a.approveFrom > 0) numText(a.approveFrom) else "",
+        )
     }
 
     fun saveAcc() {
@@ -805,11 +822,24 @@ class AppViewModel(
         val bal = e.balance.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
         store.update { s ->
             if (e.id == null) {
-                s.copy(accounts = s.accounts + Account("a${s.nextId}", name, e.type, e.mask.trim(), e.cur, bal, e.inTotal), nextId = s.nextId + 1)
+                s.copy(
+                    accounts = s.accounts + Account(
+                        "a${s.nextId}", name, e.type, e.mask.trim(), e.cur, bal, e.inTotal,
+                        shared = e.shared, approveFrom = num(e.approveFrom),
+                    ),
+                    nextId = s.nextId + 1,
+                )
             } else {
                 val c = Calc(s)
                 s.copy(accounts = s.accounts.map {
-                    if (it.id == e.id) it.copy(name = name, type = e.type, mask = e.mask.trim(), initial = bal - (c.balance(it) - it.initial), inTotal = e.inTotal) else it
+                    if (it.id == e.id) {
+                        it.copy(
+                            name = name, type = e.type, mask = e.mask.trim(), initial = bal - (c.balance(it) - it.initial),
+                            inTotal = e.inTotal, shared = e.shared, approveFrom = num(e.approveFrom),
+                        )
+                    } else {
+                        it
+                    }
                 })
             }
         }
@@ -2054,6 +2084,7 @@ class AppViewModel(
                     received += theirs.size
                 }
                 markSynced()
+                settleRequests()
                 say(if (received > 0) "sync.done" else "sync.doneAlone", received)
             } catch (e: SyncError) {
                 say(e.key, *e.args.toTypedArray())
@@ -2093,6 +2124,107 @@ class AppViewModel(
     private fun markSynced() {
         val now = Clock.System.now().toEpochMilliseconds()
         store.update { s -> s.copy(space = s.space?.copy(syncedAt = now)) }
+    }
+
+    // ——— заявки на расход ———
+
+    private fun askApproval(d: Draft, amount: Double, acc: Account) {
+        val sp = store.current.space ?: return
+        val c = calc
+        store.update { s ->
+            s.copy(
+                requests = s.requests + SpendRequest(
+                    id = s.nextId,
+                    by = sp.memberId,
+                    byName = sp.memberName,
+                    accId = acc.id,
+                    amount = amount,
+                    cat = d.cat,
+                    title = d.note.trim().ifBlank { c.cat(d.cat).name },
+                    date = d.date,
+                    at = Clock.System.now().toEpochMilliseconds(),
+                ),
+                nextId = s.nextId + 1,
+            )
+        }
+        draft = null
+        say("req.sent", c.fmt(amount, acc.cur))
+    }
+
+    /** Ждут моего решения: чужие заявки без ответа. */
+    fun requestsForMe(): List<SpendRequest> {
+        val me = store.current.space?.memberId ?: return emptyList()
+        return store.current.requests.filter { it.status == RequestStatus.PENDING && it.by != me }.sortedByDescending { it.at }
+    }
+
+    /** Мои заявки: последние сверху. */
+    fun myRequests(): List<SpendRequest> {
+        val me = store.current.space?.memberId ?: return emptyList()
+        return store.current.requests.filter { it.by == me }.sortedByDescending { it.at }.take(30)
+    }
+
+    fun approveRequest(id: Long) = decide(id, RequestStatus.APPROVED, "req.approved")
+
+    fun declineRequest(id: Long) = decide(id, RequestStatus.DECLINED, "req.declined")
+
+    private fun decide(id: Long, status: String, message: String) {
+        val sp = store.current.space ?: return
+        val req = store.current.requests.firstOrNull { it.id == id } ?: return
+        // своё решать нельзя: смысл заявки в согласии другого человека
+        if (req.by == sp.memberId || req.status != RequestStatus.PENDING) return
+        val now = Clock.System.now().toEpochMilliseconds()
+        store.update { s ->
+            s.copy(
+                requests = s.requests.map {
+                    if (it.id == id) it.copy(status = status, decidedBy = sp.memberId, decidedByName = sp.memberName, decidedAt = now) else it
+                },
+            )
+        }
+        say(message, req.byName)
+    }
+
+    fun cancelRequest(id: Long) {
+        val sp = store.current.space ?: return
+        store.update { s ->
+            s.copy(
+                requests = s.requests.map {
+                    if (it.id == id && it.by == sp.memberId && it.status == RequestStatus.PENDING) it.copy(status = RequestStatus.CANCELLED) else it
+                },
+            )
+        }
+        say("req.cancelled")
+    }
+
+    /**
+     * Одобренные мои заявки превращаются в операции. Делает это только автор
+     * заявки: так на одну покупку не появится двух операций у двух людей.
+     */
+    private fun settleRequests() {
+        val me = store.current.space?.memberId ?: return
+        val ready = store.current.requests.filter { it.by == me && it.status == RequestStatus.APPROVED && it.txId == null }
+        if (ready.isEmpty()) return
+        store.update { s ->
+            var next = s.nextId
+            val made = mutableMapOf<Long, Tx>()
+            ready.forEach { r ->
+                made[r.id] = Tx(
+                    id = next++,
+                    date = r.date,
+                    title = r.title,
+                    cat = r.cat,
+                    acc = r.accId,
+                    amount = -r.amount,
+                    note = l.t("req.txNote", r.decidedByName),
+                    by = me,
+                )
+            }
+            s.copy(
+                txs = made.values.toList() + s.txs,
+                requests = s.requests.map { r -> made[r.id]?.let { r.copy(txId = it.id) } ?: r },
+                nextId = next,
+            )
+        }
+        say("req.settled", ready.size)
     }
 
     // ——— обмен напрямую по Wi-Fi ———
@@ -2141,6 +2273,7 @@ class AppViewModel(
         if (snap.spaceId != mine.id) return 409 to "{}"
         absorb(snap)
         markSynced()
+        settleRequests()
         say("sync.lan.received", snap.memberName)
         val out = ownSnapshot() ?: return 409 to "{}"
         return 200 to syncJson.encodeToString(SyncSnapshot.serializer(), out)

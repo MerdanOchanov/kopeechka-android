@@ -45,6 +45,7 @@ import app.kopeechka.finance.data.Bar
 import app.kopeechka.finance.data.BudgetRow
 import app.kopeechka.finance.data.CAT_TRANSFER
 import app.kopeechka.finance.data.Calc
+import app.kopeechka.finance.data.pendingOn
 import app.kopeechka.finance.data.biz
 import app.kopeechka.finance.data.debtDone
 import app.kopeechka.finance.data.bizCompare
@@ -230,6 +231,7 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
         }
 
         InboxBar(vm, c)
+        RequestsBar(vm, c)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SectionTitle(l.t("home.accounts")) { GhostButton(l.t("home.transfer"), { vm.openAdd(Kind.TRANSFER) }) }
@@ -241,8 +243,13 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
                     style = T.h(15.sp, if (bal < 0) col.danger else if (a.inTotal) col.text else col.n600),
                     maxLines = 1,
                 )
+                val pending = c.d.pendingOn(a.id)
                 Text(
-                    if (a.cur == c.main) a.cur else "${a.cur} ≈ ${c.fmtMain(c.toMain(bal, a.cur))}",
+                    when {
+                        pending > 0 -> l.t("req.pendingShort", c.fmt(pending, a.cur))
+                        a.cur == c.main -> a.cur
+                        else -> "${a.cur} ≈ ${c.fmtMain(c.toMain(bal, a.cur))}"
+                    },
                     style = T.b(9.5.sp, col.a700, 0.1.em),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
