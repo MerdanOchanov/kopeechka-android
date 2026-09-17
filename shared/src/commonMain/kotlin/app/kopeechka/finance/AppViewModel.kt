@@ -82,7 +82,7 @@ import app.kopeechka.finance.net.backupMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -1602,7 +1602,7 @@ class AppViewModel(
 
     /** «2026-09-15_10-45-03» в имени файла копии. */
     private fun backupFileStamp(): String {
-        val now = kotlinx.datetime.Clock.System.now()
+        val now = kotlin.time.Clock.System.now()
             .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
         fun two(v: Int) = v.toString().padStart(2, '0')
         return "${now.year}-${two(now.monthNumber)}-${two(now.dayOfMonth)}_" +
@@ -2355,7 +2355,7 @@ class AppViewModel(
     fun backupNow() = driveAction { t ->
         val name = DriveApi.upload(t, store.exportJson(), "kopeechka-" + backupFileStamp() + ".json")
         DriveApi.prune(t, 10)
-        settings { it.copy(lastBackupAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()) }
+        settings { it.copy(lastBackupAt = kotlin.time.Clock.System.now().toEpochMilliseconds()) }
         driveList = DriveApi.list(t)
         say("msg.backupSaved", name)
     }

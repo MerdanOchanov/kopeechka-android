@@ -6,7 +6,7 @@ import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.Sync
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.cinterop.BetaInteropApi

@@ -7,7 +7,7 @@ import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.ParsedSms
 import app.kopeechka.finance.data.SmsParse
 import app.kopeechka.finance.data.Tx
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 

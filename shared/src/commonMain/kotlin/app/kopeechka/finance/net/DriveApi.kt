@@ -27,7 +27,7 @@ import kotlinx.serialization.json.put
 
 /** «14 сен 2026, 10:45» — на языке приложения, без системной локали. */
 fun formatBackupTime(epochMillis: Long, l: Lang): String {
-    val dt = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMillis)
+    val dt = kotlin.time.Instant.fromEpochMilliseconds(epochMillis)
         .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
     val month = l.monthsShort.getOrElse(dt.monthNumber - 1) { "" }
     val hh = dt.hour.toString().padStart(2, '0')
@@ -37,7 +37,7 @@ fun formatBackupTime(epochMillis: Long, l: Lang): String {
 
 /** Время создания копии: Google отдаёт его строкой ISO. */
 fun backupMillis(b: RemoteBackup): Long =
-    runCatching { kotlinx.datetime.Instant.parse(b.createdIso).toEpochMilliseconds() }.getOrDefault(0L)
+    runCatching { kotlin.time.Instant.parse(b.createdIso).toEpochMilliseconds() }.getOrDefault(0L)
 
 /** Копия на Диске: идентификатор, имя, когда создана (ISO-время от Google) и размер. */
 data class RemoteBackup(val id: String, val name: String, val createdIso: String, val size: Long)

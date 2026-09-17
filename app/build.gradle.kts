@@ -3,7 +3,6 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
@@ -16,13 +15,13 @@ val uploadKey = Properties().apply {
 
 android {
     namespace = "app.kopeechka.finance"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.kopeechka.finance"
         minSdk = 26
-        // Google Play с 2026 года принимает только targetSdk 36 и выше
-        targetSdk = 36
+        // Google Play с 2026 года принимает только targetSdk 36 и выше; держим самый свежий
+        targetSdk = 37
         versionCode = 10
         versionName = "1.8"
     }
@@ -104,7 +103,7 @@ tasks.withType<Test>().configureEach {
 
 dependencies {
     implementation(project(":shared"))
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
 
     // Compose приходит из :shared (Compose Multiplatform), отдельный BOM больше не нужен
 
