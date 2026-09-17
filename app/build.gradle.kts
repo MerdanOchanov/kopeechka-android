@@ -16,13 +16,14 @@ val uploadKey = Properties().apply {
 
 android {
     namespace = "app.kopeechka.finance"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.kopeechka.finance"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 9
+        // Google Play с 2026 года принимает только targetSdk 36 и выше
+        targetSdk = 36
+        versionCode = 10
         versionName = "1.8"
     }
 
@@ -55,6 +56,8 @@ android {
         }
         create("play") {
             dimension = "store"
+            // под этим именем приложение заведено в Play Console — поменять его там уже нельзя
+            applicationId = "com.arassanusga.kopeechka"
             buildConfigField("boolean", "SMS_ENABLED", "false")
         }
     }
@@ -78,6 +81,9 @@ android {
                 "META-INF/NOTICE*",
                 "META-INF/INDEX.LIST",
                 "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                // Windows-библиотека из зависимостей сервера Ktor: на Android не грузится,
+                // а Play из-за неё просит символы отладки нативного кода
+                "org/fusesource/jansi/internal/native/**",
             )
         }
     }
