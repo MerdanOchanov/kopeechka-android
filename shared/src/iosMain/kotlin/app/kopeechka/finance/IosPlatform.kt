@@ -93,6 +93,18 @@ class IosPlatform(private val storage: IosStorage) : Platform {
 
     override suspend fun readSmsHistory(days: Int): List<SmsMessage> = emptyList()
 
+    // ——— обмен напрямую по Wi-Fi ———
+
+    /**
+     * iPhone пока только отправляет: подключается к андроиду, который принимает.
+     * Серверную часть Ktor под iOS ещё предстоит проверить.
+     */
+    override val canHostLan = false
+
+    override suspend fun startLanHost(onExchange: suspend (code: String, body: String) -> Pair<Int, String>): String? = null
+
+    override fun stopLanHost() = Unit
+
     override suspend fun driveToken(): String? = null
 
     override fun saveBeforeRestore(json: String) = storage.saveBeforeRestore(json)

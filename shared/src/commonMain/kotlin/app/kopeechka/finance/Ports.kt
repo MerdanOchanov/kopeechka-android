@@ -101,6 +101,20 @@ interface Platform {
     /** Сообщения за последние дни — чтобы разобрать уже пришедшее. */
     suspend fun readSmsHistory(days: Int): List<SmsMessage>
 
+    // ——— обмен напрямую по Wi-Fi ———
+
+    /** Может ли телефон принимать обмен сам. Отправлять умеют все. */
+    val canHostLan: Boolean
+
+    /**
+     * Начать приём в локальной сети. [onExchange] получает код из запроса и тело,
+     * возвращает код ответа и тело. Результат — «адрес:порт» для экрана или null,
+     * если телефон не в сети.
+     */
+    suspend fun startLanHost(onExchange: suspend (code: String, body: String) -> Pair<Int, String>): String?
+
+    fun stopLanHost()
+
     // ——— Google Диск ———
 
     /**

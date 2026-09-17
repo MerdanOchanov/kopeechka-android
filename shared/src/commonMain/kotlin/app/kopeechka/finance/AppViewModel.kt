@@ -66,6 +66,8 @@ import app.kopeechka.finance.net.AiImage
 import app.kopeechka.finance.net.AiError
 import app.kopeechka.finance.net.DriveApi
 import app.kopeechka.finance.net.DriveSync
+import app.kopeechka.finance.net.LanSync
+import app.kopeechka.finance.net.syncJson
 import app.kopeechka.finance.net.SyncError
 import app.kopeechka.finance.net.SyncTransport
 import app.kopeechka.finance.net.WebDavSync
@@ -74,7 +76,9 @@ import app.kopeechka.finance.net.RemoteBackup
 import app.kopeechka.finance.net.formatBackupTime
 import kotlinx.datetime.toLocalDateTime
 import app.kopeechka.finance.net.backupMillis
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -263,6 +267,20 @@ class AppViewModel(
 
     /** Настройки WebDAV открыты. */
     var webdavEdit by mutableStateOf<WebDavEdit?>(null)
+
+    /** Адрес, по которому этот телефон сейчас принимает обмен; null — не принимает. */
+    var lanHostAddress by mutableStateOf<String?>(null)
+        private set
+
+    /** Код, который гость вводит у себя. */
+    var lanHostCode by mutableStateOf("")
+        private set
+
+    /** Что ввёл гость: адрес второго телефона и код с его экрана. */
+    var lanAddress by mutableStateOf("")
+    var lanCode by mutableStateOf("")
+
+    private var lanFails = 0
 
     /** Черновик, который сейчас правят перед записью. */
     var inboxEdit by mutableStateOf<InboxItem?>(null)
@@ -2013,34 +2031,30 @@ class AppViewModel(
     }
 
     /**
-     * Обмен: забрать чужие снимки, слить у себя, отправить объединённое.
-     *
-     * Порядок именно такой — отправляем уже слитое, чтобы второй участник за один
-     * заход получил и мои правки, и то, что я узнал от третьего. Повторный запуск
-     * ничего не портит: слияние не зависит ни от порядка, ни от числа повторов.
+     * Обмен через облако: по каждому включённому способу отдаём свой снимок
+     * и забираем чужие. Снимок собирается заново перед каждым способом —
+     * так во второй уходит уже то, что пришло из первого.
      */
     fun syncNow() {
         val sp = store.current.space ?: return
         if (syncBusy) return
         val transports = transportsFor(sp)
         if (transports.isEmpty()) return say("sync.err.noLink")
+        runExchange(transports)
+    }
+
+    private fun runExchange(transports: List<SyncTransport>) {
         syncBusy = true
         viewModelScope.launch {
             try {
-                var pulled = 0
-                val now = Clock.System.now().toEpochMilliseconds()
+                var received = 0
                 transports.forEach { t ->
-                    t.pull(sp.id, sp.memberId).forEach { snap ->
-                        store.applyMerged(Sync.merge(store.current, snap.data, now))
-                        pulled++
-                    }
+                    val theirs = t.exchange(ownSnapshot() ?: return@launch)
+                    theirs.forEach { absorb(it) }
+                    received += theirs.size
                 }
-                val out = SyncSnapshot(sp.id, sp.memberId, sp.memberName, now, store.current.forSync())
-                transports.forEach { it.push(out) }
-                store.update { s ->
-                    s.copy(space = s.space?.copy(syncedAt = now))
-                }
-                say(if (pulled > 0) "sync.done" else "sync.doneAlone", pulled)
+                markSynced()
+                say(if (received > 0) "sync.done" else "sync.doneAlone", received)
             } catch (e: SyncError) {
                 say(e.key, *e.args.toTypedArray())
             } catch (e: DriveAuthError) {
@@ -2051,6 +2065,100 @@ class AppViewModel(
                 syncBusy = false
             }
         }
+    }
+
+    /** Мой снимок для обмена: без черновиков, правил СМС и личных мелочей. */
+    private fun ownSnapshot(): SyncSnapshot? {
+        val sp = store.current.space ?: return null
+        val now = Clock.System.now().toEpochMilliseconds()
+        return SyncSnapshot(sp.id, sp.memberId, sp.memberName, now, store.current.forSync())
+    }
+
+    /**
+     * Принять чужой снимок: слить данные и запомнить участника. Пишется без
+     * отметок времени — у чужих правок своё время, и оно должно сохраниться.
+     */
+    private fun absorb(snap: SyncSnapshot) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val merged = Sync.merge(store.current, snap.data, now)
+        val sp = merged.space ?: return
+        val members = if (sp.members.any { it.id == snap.memberId }) {
+            sp.members.map { if (it.id == snap.memberId) it.copy(name = snap.memberName) else it }
+        } else {
+            sp.members + SyncMember(snap.memberId, snap.memberName, 0)
+        }
+        store.applyMerged(merged.copy(space = sp.copy(members = members)))
+    }
+
+    private fun markSynced() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        store.update { s -> s.copy(space = s.space?.copy(syncedAt = now)) }
+    }
+
+    // ——— обмен напрямую по Wi-Fi ———
+
+    val canHostLan get() = platform.canHostLan
+
+    /**
+     * Принимать обмен с телефона рядом. Порт открыт, только пока открыт этот
+     * режим; вход — по шестизначному коду с экрана, после пяти неверных попыток
+     * приём закрывается сам: код короткий, и перебирать его нельзя давать.
+     */
+    fun startLanHost() {
+        if (store.current.space == null || lanHostAddress != null) return
+        val code = (1..6).map { Random.nextInt(10) }.joinToString("")
+        lanFails = 0
+        viewModelScope.launch {
+            val address = runCatching {
+                // сервер отвечает из своего потока, а состояние экрана меняется только в главном
+                platform.startLanHost { given, body -> withContext(Dispatchers.Main) { handleLan(code, given, body) } }
+            }.getOrNull()
+            if (address == null) return@launch say("sync.lan.noNetwork")
+            lanHostCode = code
+            lanHostAddress = address
+        }
+    }
+
+    fun stopLanHost() {
+        platform.stopLanHost()
+        lanHostAddress = null
+        lanHostCode = ""
+    }
+
+    /** Один разговор с гостем: проверить код, слить его снимок, отдать свой. */
+    private suspend fun handleLan(expected: String, given: String, body: String): Pair<Int, String> {
+        if (given != expected) {
+            lanFails++
+            if (lanFails >= 5) {
+                stopLanHost()
+                say("sync.lan.tooMany")
+            }
+            return 403 to "{}"
+        }
+        val snap = runCatching { syncJson.decodeFromString(SyncSnapshot.serializer(), body) }.getOrNull()
+            ?: return 400 to "{}"
+        val mine = store.current.space ?: return 409 to "{}"
+        if (snap.spaceId != mine.id) return 409 to "{}"
+        absorb(snap)
+        markSynced()
+        say("sync.lan.received", snap.memberName)
+        val out = ownSnapshot() ?: return 409 to "{}"
+        return 200 to syncJson.encodeToString(SyncSnapshot.serializer(), out)
+    }
+
+    /** Гостевая сторона: обменяться с телефоном, который сейчас принимает. */
+    fun syncLan() {
+        if (store.current.space == null || syncBusy) return
+        val address = lanAddress.trim()
+        val code = lanCode.trim()
+        if (address.isEmpty()) return say("sync.lan.needAddress")
+        if (code.length != 6) return say("sync.lan.needCode")
+        runExchange(listOf(LanSync(address, code)))
+    }
+
+    override fun onCleared() {
+        platform.stopLanHost()
+        super.onCleared()
     }
 
     private fun transportsFor(sp: SyncSpace): List<SyncTransport> = sp.links.filter { it.enabled }.mapNotNull { link ->

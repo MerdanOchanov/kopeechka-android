@@ -83,6 +83,9 @@ dependencies {
 
     // HTTP для Диска и ИИ-советника живёт в :shared на Ktor
 
+    // Приём обмена напрямую по Wi-Fi: маленький сервер на одну ручку
+    implementation("io.ktor:ktor-server-cio:3.0.3")
+
     // Тесты слияния: логика общая, но гонять её достаточно на JVM
     testImplementation("junit:junit:4.13.2")
 }

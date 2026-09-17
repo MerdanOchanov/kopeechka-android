@@ -237,6 +237,17 @@ class AndroidPlatform(private val ctx: Context) : Platform {
         out
     }
 
+    // ——— обмен напрямую по Wi-Fi ———
+
+    private val lanHost = app.kopeechka.finance.net.LanHost()
+
+    override val canHostLan = true
+
+    override suspend fun startLanHost(onExchange: suspend (code: String, body: String) -> Pair<Int, String>): String? =
+        withContext(Dispatchers.IO) { lanHost.start(onExchange) }
+
+    override fun stopLanHost() = lanHost.stop()
+
     private companion object {
         const val MAX_SIDE = 1600
         const val MAX_SMS = 500

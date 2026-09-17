@@ -24,11 +24,13 @@ import kotlinx.serialization.json.Json
  * замков и очередей не нужно — слияние не зависит от порядка.
  */
 interface SyncTransport {
-    /** Чужие снимки: свой в ответе не нужен. */
-    suspend fun pull(spaceId: String, meId: String): List<SyncSnapshot>
-
-    /** Положить свой снимок, заменив прежний. */
-    suspend fun push(snapshot: SyncSnapshot)
+    /**
+     * Отдать свой снимок и забрать чужие — один заход.
+     *
+     * У облака это два запроса подряд, у прямой передачи по Wi-Fi — один
+     * обмен: телефоны отдают снимки друг другу в одном разговоре.
+     */
+    suspend fun exchange(mine: SyncSnapshot): List<SyncSnapshot>
 }
 
 class SyncError(val key: String, val args: List<Any?> = emptyList()) : Exception(key)
@@ -52,26 +54,17 @@ fun memberOfName(name: String): String? =
  */
 class DriveSync(private val token: suspend () -> String?) : SyncTransport {
 
-    override suspend fun pull(spaceId: String, meId: String): List<SyncSnapshot> {
+    override suspend fun exchange(mine: SyncSnapshot): List<SyncSnapshot> {
         val t = token() ?: throw SyncError("sync.err.noAccess")
         val folder = DriveApi.sharedFolderName
+        DriveApi.putNamed(t, folder, snapshotName(mine.memberId), syncJson.encodeToString(SyncSnapshot.serializer(), mine))
         return DriveApi.listNamed(t, folder)
-            .filter { memberOfName(it.name).let { m -> m != null && m != meId } }
+            .filter { memberOfName(it.name).let { m -> m != null && m != mine.memberId } }
             .mapNotNull { file ->
                 runCatching { syncJson.decodeFromString(SyncSnapshot.serializer(), DriveApi.download(t, file.id)) }
                     .getOrNull()
-                    ?.takeIf { it.spaceId == spaceId }
+                    ?.takeIf { it.spaceId == mine.spaceId }
             }
-    }
-
-    override suspend fun push(snapshot: SyncSnapshot) {
-        val t = token() ?: throw SyncError("sync.err.noAccess")
-        DriveApi.putNamed(
-            t,
-            DriveApi.sharedFolderName,
-            snapshotName(snapshot.memberId),
-            syncJson.encodeToString(SyncSnapshot.serializer(), snapshot),
-        )
     }
 }
 
@@ -89,22 +82,20 @@ class WebDavSync(
 
     private val base = link.url.trim().trimEnd('/')
 
-    override suspend fun pull(spaceId: String, meId: String): List<SyncSnapshot> =
-        names()
-            .filter { memberOfName(it).let { m -> m != null && m != meId } }
-            .mapNotNull { name ->
-                runCatching { syncJson.decodeFromString(SyncSnapshot.serializer(), read(name)) }
-                    .getOrNull()
-                    ?.takeIf { it.spaceId == spaceId }
-            }
-
-    override suspend fun push(snapshot: SyncSnapshot) {
-        val body = syncJson.encodeToString(SyncSnapshot.serializer(), snapshot)
-        val resp = call(HttpMethod.Put, snapshotName(snapshot.memberId)) {
+    override suspend fun exchange(mine: SyncSnapshot): List<SyncSnapshot> {
+        val body = syncJson.encodeToString(SyncSnapshot.serializer(), mine)
+        val resp = call(HttpMethod.Put, snapshotName(mine.memberId)) {
             contentType(ContentType.Application.Json)
             setBody(body)
         }
         if (resp.status.value !in 200..299) throw codeError(resp.status.value)
+        return names()
+            .filter { memberOfName(it).let { m -> m != null && m != mine.memberId } }
+            .mapNotNull { name ->
+                runCatching { syncJson.decodeFromString(SyncSnapshot.serializer(), read(name)) }
+                    .getOrNull()
+                    ?.takeIf { it.spaceId == mine.spaceId }
+            }
     }
 
     /** Проверка настроек: положить и забрать пробный файл. */
@@ -166,3 +157,43 @@ class WebDavSync(
 }
 
 private val HttpMethod.Companion.Propfind get() = HttpMethod("PROPFIND")
+
+/** Заголовок, в котором гость передаёт код с экрана хозяина. */
+const val LAN_CODE_HEADER = "X-Kopeechka-Code"
+
+/**
+ * Прямой обмен с телефоном в той же сети — без облака и без интернета.
+ *
+ * Один телефон принимает (показывает адрес и шестизначный код), второй
+ * отправляет ему свой снимок и в ответе получает снимок хозяина. Всё за
+ * один запрос. Данные идут по домашней сети открытым текстом — поэтому приём
+ * работает только пока открыт экран, требует код и закрывается после пяти
+ * неверных попыток.
+ */
+class LanSync(address: String, private val code: String) : SyncTransport {
+
+    private val url = "http://" + address.trim().removePrefix("http://").trimEnd('/') + "/exchange"
+
+    override suspend fun exchange(mine: SyncSnapshot): List<SyncSnapshot> {
+        val resp = try {
+            http.request(url) {
+                method = HttpMethod.Post
+                header(LAN_CODE_HEADER, code)
+                contentType(ContentType.Application.Json)
+                setBody(syncJson.encodeToString(SyncSnapshot.serializer(), mine))
+            }
+        } catch (e: Exception) {
+            println("Kopeechka/Sync: второй телефон не ответил — $e")
+            throw SyncError("sync.lan.unreachable")
+        }
+        when (resp.status.value) {
+            in 200..299 -> Unit
+            403 -> throw SyncError("sync.lan.wrongCode")
+            409 -> throw SyncError("sync.lan.otherSpace")
+            else -> throw SyncError("sync.err.code", listOf(resp.status.value))
+        }
+        val theirs = runCatching { syncJson.decodeFromString(SyncSnapshot.serializer(), resp.bodyAsText()) }.getOrNull()
+            ?: throw SyncError("sync.lan.badAnswer")
+        return listOf(theirs)
+    }
+}

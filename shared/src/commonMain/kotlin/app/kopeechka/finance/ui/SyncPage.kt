@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,8 @@ fun SyncPage(vm: AppViewModel, c: Calc) {
     val col = T.c
     val l = T.l
     val space = c.d.space
+    // ушли с экрана — приём закрывается: открытый порт без присмотра не нужен
+    DisposableEffect(Unit) { onDispose { vm.stopLanHost() } }
     ScreenColumn(gap = 18.dp) {
         PageHeader(l.t("sync.title")) { vm.page = null }
 
@@ -97,6 +100,34 @@ fun SyncPage(vm: AppViewModel, c: Calc) {
             if (space.syncedAt > 0) Muted(formatBackupTime(space.syncedAt, l))
         }
         PrimaryButton(if (vm.syncBusy) l.t("sync.working") else l.t("sync.now"), { vm.syncNow() }, enabled = !vm.syncBusy)
+
+        SectionTitle(l.t("sync.lan.title"))
+        Muted(l.t("sync.lan.note"), 11.5f)
+        val hosting = vm.lanHostAddress
+        if (hosting != null) {
+            Column(
+                Modifier.fillMaxWidth().background(col.hero).padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(l.t("sync.lan.address").uppercase(), style = T.b(10.sp, col.a300, 0.18.em))
+                Text(hosting, style = T.h(22.sp, col.onAccent, 0.04.em))
+                Text(l.t("sync.lan.codeLabel").uppercase(), style = T.b(10.sp, col.a300, 0.18.em))
+                Text(vm.lanHostCode, style = T.h(30.sp, col.onAccent, 0.2.em))
+                Text(l.t("sync.lan.hostNote"), style = T.b(11.sp, col.a300))
+            }
+            SecondaryButton(l.t("sync.lan.stop"), { vm.stopLanHost() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+        } else {
+            if (vm.canHostLan) {
+                SecondaryButton(l.t("sync.lan.host"), { vm.startLanHost() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            }
+            Field(l.t("sync.lan.address"), vm.lanAddress, { vm.lanAddress = it }, placeholder = "192.168.1.5:8733")
+            Field(l.t("sync.lan.codeLabel"), vm.lanCode, { vm.lanCode = it }, numeric = true, placeholder = "000000")
+            PrimaryButton(
+                if (vm.syncBusy) l.t("sync.working") else l.t("sync.lan.go"),
+                { vm.syncLan() },
+                enabled = !vm.syncBusy,
+            )
+        }
 
         val dupes = vm.duplicatePairs()
         if (dupes.isNotEmpty()) {

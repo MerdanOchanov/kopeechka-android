@@ -22,6 +22,10 @@ targets:
         # Без этих пояснений iOS не пустит к камере и галерее — их видит человек в запросе доступа
         NSCameraUsageDescription: Чтобы снять чек и разобрать его сумму
         NSPhotoLibraryUsageDescription: Чтобы выбрать фотографию чека и разобрать его сумму
+        # обмен с телефоном в той же сети идёт по http на локальный адрес
+        NSLocalNetworkUsageDescription: Чтобы обменяться записями с телефоном рядом
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:
