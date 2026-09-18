@@ -1149,6 +1149,9 @@ internal val RU_STRINGS: Map<String, String> = mapOf(
 
     // ——— демо-данные ———
     "demo.cur" to "RUB",
+    "demo.acc.usd" to "Доллары",
+    "demo.rec.phone" to "Рассрочка за телефон",
+    "demo.rec.net" to "Интернет",
     "demo.acc.card" to "Карта · 4417",
     "demo.acc.cash" to "Наличные",
     "demo.acc.save" to "Накопления",

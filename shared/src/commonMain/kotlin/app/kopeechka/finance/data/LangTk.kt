@@ -1064,6 +1064,9 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
 
     // ——— demo maglumatlar ———
     "demo.cur" to "TMT",
+    "demo.acc.usd" to "Dollar",
+    "demo.rec.phone" to "Telefon üçin bölekleýin töleg",
+    "demo.rec.net" to "Internet",
     "demo.acc.card" to "Kart · 4417",
     "demo.acc.cash" to "Nagt pul",
     "demo.acc.save" to "Ýygnym",

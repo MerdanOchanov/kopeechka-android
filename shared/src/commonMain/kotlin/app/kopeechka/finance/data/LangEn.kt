@@ -1063,6 +1063,9 @@ If a field is not visible, leave an empty string, and return total only if you a
 
     // ——— sample data ———
     "demo.cur" to "USD",
+    "demo.acc.usd" to "Dollars",
+    "demo.rec.phone" to "Phone instalments",
+    "demo.rec.net" to "Internet",
     "demo.acc.card" to "Card · 4417",
     "demo.acc.cash" to "Cash",
     "demo.acc.save" to "Savings",

@@ -210,6 +210,35 @@ object Demo {
             Account("card", l.t("demo.acc.card"), l.t("acc.type.card"), l.t("demo.acc.cardMask"), cur, initial("card", money(112480.0))),
             Account("cash", l.t("demo.acc.cash"), l.t("acc.type.cash"), "", cur, initial("cash", money(9840.0))),
             Account("save", l.t("demo.acc.save"), l.t("acc.type.savings"), l.t("demo.acc.saveMask"), cur, initial("save", money(115000.0))),
+        ) + if (cur == "USD") {
+            emptyList()
+        } else {
+            // Сбережения в долларах: на них видно, как работают курсы.
+            listOf(Account("usd", l.t("demo.acc.usd"), l.t("acc.type.savings"), "", "USD", 800.0))
+        }
+
+        // Регулярные платежи с ближайшими датами — чтобы на главной были «ближайшие платежи».
+        val recurring = listOf(
+            Recurring(
+                id = "rec-phone",
+                title = l.t("demo.rec.phone"),
+                amount = money(4500.0),
+                accId = "card",
+                cat = "other",
+                start = today.plusDays(5).minusMonths(5).toEpochDay(),
+                total = 12,
+                done = 5,
+            ),
+            Recurring(
+                id = "rec-net",
+                title = l.t("demo.rec.net"),
+                amount = money(650.0),
+                accId = "card",
+                cat = "home",
+                start = today.plusDays(2).minusMonths(7).toEpochDay(),
+                done = 7,
+                auto = true,
+            ),
         )
 
         val goals = listOf(
@@ -224,6 +253,7 @@ object Demo {
             categories = categories(l, cur) + if (business) bizCategories(l) else emptyList(),
             txs = all.sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.id }),
             goals = goals,
+            recurring = recurring,
             products = biz.products,
             customers = biz.customers,
             orders = biz.orders,
@@ -231,6 +261,8 @@ object Demo {
                 mainCur = cur,
                 lang = if (l.code == Lang.fromSystem().code) "auto" else l.code,
                 rates = rates(cur),
+                // В манатах доллар на рынке в разы дороже официального — показываем оба курса.
+                marketRates = if (cur == "TMT") mapOf("USD" to 19.5) else emptyMap(),
                 currencyCodes = (listOf(cur) + Currencies.DEFAULT_CODES).distinct(),
                 business = business,
             ),
