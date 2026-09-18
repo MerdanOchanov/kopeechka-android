@@ -4,9 +4,12 @@
 
 | Инструмент | Версия | Зачем |
 | --- | --- | --- |
-| JDK | 17 или новее (проверено на 21) | Gradle и компилятор Kotlin |
-| Android SDK | platform 35, build-tools 35.0.0, platform-tools | сборка и установка |
-| Gradle | 8.11.1 — ставится обёрткой `gradlew` | — |
+| JDK | 17 или новее (проверено на 21) | Gradle, AGP 9 и компилятор Kotlin |
+| Android SDK | platform 37, platform-tools | сборка и установка (`compileSdk`/`targetSdk` 37, `minSdk` 26) |
+| Gradle | 9.7.1 — ставится обёрткой `gradlew` | — |
+
+Плагины: Android Gradle Plugin 9.4, Kotlin 2.4.20, Compose Multiplatform 1.12.
+Модуль `:shared` подключает Android через плагин `com.android.kotlin.multiplatform.library`.
 
 Путь к SDK указывается в `local.properties` (файл не в репозитории):
 
@@ -14,93 +17,77 @@
 sdk.dir=C\:\\Users\\<имя>\\AppData\\Local\\Android\\Sdk
 ```
 
-Если SDK нет, поставить без Android Studio можно command-line tools:
+Без Android Studio SDK ставится command-line tools:
 
 ```bash
-sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+sdkmanager --install "platform-tools" "platforms;android-37"
 ```
+
+## Варианты приложения
+
+| Вариант | Пакет | Для чего |
+| --- | --- | --- |
+| `full` | `app.kopeechka.finance` | APK на GitHub и свой телефон: все функции, чтение СМС, проверка обновлений с GitHub |
+| `play` | `com.arassanusga.kopeechka` | Google Play: без чтения СМС и без проверки обновлений (почему — в [PLAY.md](PLAY.md)) |
+
+```bash
+gradlew.bat :app:assembleFullDebug        # app/build/outputs/apk/full/debug/app-full-debug.apk
+gradlew.bat :app:bundlePlayRelease        # app/build/outputs/bundle/playRelease/app-play-release.aab
+```
+
+Установка на телефон с отладкой по USB или по Wi-Fi:
+
+```bash
+adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
+```
+
+Номер версии — `versionCode` и `versionName` в `app/build.gradle.kts`, для iOS —
+`CFBundleVersion` и `CFBundleShortVersionString` в `iosApp/project.yml`. Меняйте их вместе.
+
+## Тесты
+
+```bash
+gradlew.bat :app:testFullDebugUnitTest
+```
+
+Тесты общего кода лежат в `app/src/test` и покрывают слияние общего бюджета, курсы
+(включая золото и два курса), разбор СМС реальных банков, регулярные платежи, QR-чеки,
+выписки CSV, курсы ЦБ и сравнение версий. Те же тесты гоняет CI (`.github/workflows/android.yml`)
+на каждое изменение.
 
 ## Общий код и iOS
 
-Ядро, сеть и часть интерфейса лежат в модуле `:shared` (Kotlin Multiplatform,
-Compose Multiplatform). Android собирается как обычно, а вот проверить, что общий
-код действительно не зацепил платформенных API, можно и на Windows:
+Проверить, что общий код не зацепил платформенных API, можно и на Windows:
 
 ```bash
 gradlew.bat :shared:compileCommonMainKotlinMetadata
 ```
 
-Эта сборка компилирует `commonMain` без привязки к платформе и падает на всём,
-что доступно только на JVM (например, на `@Volatile` из `kotlin.jvm` — в общем
-коде нужен `kotlin.concurrent.Volatile`). Android-сборка такие места пропускает,
-поэтому запускать её стоит после каждой правки общего кода.
+Эта сборка компилирует `commonMain` без привязки к платформе и падает на всём, что
+доступно только на JVM (например, `@Volatile` из `kotlin.jvm` — в общем коде нужен
+`kotlin.concurrent.Volatile`, а время — из `kotlin.time`).
 
-Цели `iosX64`, `iosArm64` и `iosSimulatorArm64` компилируются только на macOS
-с Xcode, поэтому iOS собирается в облаке: workflow `.github/workflows/ios.yml`
-на macOS-раннере линкует `Shared.framework`, генерирует Xcode-проект из
-`iosApp/project.yml` утилитой XcodeGen, собирает приложение, запускает его
-на симуляторе и выкладывает скриншот артефактом. Запустить вручную:
-**Actions → iOS → Run workflow**.
-
-На macOS то же самое делается локально:
+Цели `iosArm64` и `iosSimulatorArm64` компилируются только на macOS с Xcode, поэтому
+iOS собирается в облаке: workflow `.github/workflows/ios.yml` линкует `Shared.framework`,
+генерирует Xcode-проект из `iosApp/project.yml` утилитой XcodeGen, собирает приложение,
+запускает его на симуляторе и выкладывает скриншот артефактом. Вручную:
+**Actions → iOS → Run workflow**. На macOS локально:
 
 ```bash
 ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64
 cd iosApp && xcodegen generate && open Kopeechka.xcodeproj
 ```
 
-Две грабли, на которые уже наступили: `gradlew` должен быть исполняемым
-(`git update-index --chmod=+x gradlew`), а путь поиска фреймворка в Xcode
-задаётся через `$(PLATFORM_NAME)` — в `$(SDK_NAME)` есть версия SDK,
-и папка не находится.
-
-## Сборка
-
-У приложения два варианта: `full` — со всеми функциями, для GitHub и своего телефона,
-и `play` — для Google Play, без чтения СМС (почему — в [PLAY.md](PLAY.md)).
-
-```bash
-gradlew.bat :app:assembleFullDebug
-```
-
-Готовый файл: `app/build/outputs/apk/full/debug/app-full-debug.apk`.
-
-Установка на телефон с включённой отладкой по USB или по Wi-Fi:
-
-```bash
-adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
-```
-
-Тесты слияния:
-
-```bash
-gradlew.bat :app:testFullDebugUnitTest
-```
-
-## Известная особенность Windows
-
-На некоторых машинах Gradle падает ещё до компиляции:
-
-```
-java.io.IOException: Unable to establish loopback connection
-```
-
-Причина не в Gradle: JDK 16+ на Windows создаёт внутренний канал через AF_UNIX-сокет
-во временной папке, и в профиле пользователя такие сокеты могут не подключаться
-(это ловится и обычным .NET-клиентом, значит дело в окружении, а не в Java).
-Лечится короткой папкой в корне диска:
-
-```bash
-mkdir C:\gtmp
-set JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\gtmp -Djava.io.tmpdir=C:\gtmp
-gradlew.bat assembleDebug
-```
+Грабли, на которые уже наступили: `gradlew` должен быть исполняемым
+(`git update-index --chmod=+x gradlew`); путь поиска фреймворка в Xcode задаётся через
+`$(PLATFORM_NAME)` — в `$(SDK_NAME)` есть версия SDK, и папка не находится; цель `iosX64`
+(Intel-симулятор) Compose Multiplatform 1.12 больше не поддерживает.
 
 ## Release-сборка
 
 Подпись, ключ загрузки и выпуск в Google Play описаны в [PLAY.md](PLAY.md).
 Коротко: ключ лежит вне репозитория, путь и пароль — в `keystore.properties`
-(в `.gitignore`), сборка для Play — `gradlew.bat :app:bundlePlayRelease`.
+(в `.gitignore`), без этого файла релиз собирается неподписанным.
 
 SHA-1 ключа, которым подписано приложение у пользователя, нужно добавить
 Android-клиентом OAuth в Google Cloud, иначе Диск не авторизуется —
@@ -108,19 +95,19 @@ Android-клиентом OAuth в Google Cloud, иначе Диск не авт�
 
 ## Проверка на устройстве
 
-Слияние общего бюджета покрыто тестами (запускаются в CI), остальное проверяется руками. Полезные команды:
-
 ```bash
 adb logcat -c && adb shell am start -n app.kopeechka.finance/.MainActivity
 adb logcat -d | findstr /i "AndroidRuntime FATAL"
 adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png
 ```
 
+Телефон с отладкой по Wi-Fi находится командой `adb mdns services`. В Git Bash путям
+вида `/sdcard/...` нужен `MSYS_NO_PATHCONV=1`, иначе они превратятся в пути Windows.
+
 ## Иконка
 
-Эскиз иконки лежит в [`tools/icon-preview.html`](../tools/icon-preview.html) — это тот же
-рисунок, что и в `res/drawable/ic_launcher_foreground.xml`, но в SVG и сразу в нескольких
-масках. Удобно править форму, глядя в браузер, и лишь потом переносить пути в вектор Android.
+Эскиз иконки лежит в [`tools/icon-preview.html`](../tools/icon-preview.html) — тот же
+рисунок, что и в `res/drawable/ic_launcher_foreground.xml`, но в SVG и в нескольких масках.
 
 ## Если сборка падает с «Unable to establish loopback connection»
 
@@ -128,31 +115,20 @@ adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png
 `java.net.SocketException: Invalid argument: connect` внутри
 `sun.nio.ch.PipeImpl$Initializer$LoopbackConnector`.
 
-Это не Gradle и не Java. `Selector.open()` на Windows открывает служебное
-соединение через Unix-сокет (`WindowsSelectorImpl` явно просит AF_UNIX), а файл
-такого сокета — точка повторного разбора. Если каталог, куда JVM его кладёт,
-этого не позволяет, `bind` проходит, файла нет, и `connect` возвращает
-«Invalid argument». Обычные сетевые соединения при этом работают, поэтому на
-проблему легко подумать на файрвол.
-
-Каталог берётся из `jdk.net.unixdomain.tmpdir`, а по умолчанию — из
-`java.io.tmpdir`, то есть `%TEMP%`. Проверить одной программой:
-
-```java
-var ssc = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
-ssc.bind(null);
-SocketChannel.open(ssc.getLocalAddress());   // здесь и падает
-```
+Это не Gradle и не Java. `Selector.open()` на Windows открывает служебное соединение
+через Unix-сокет, а файл такого сокета — точка повторного разбора. Если каталог, куда
+JVM его кладёт (`jdk.net.unixdomain.tmpdir`, по умолчанию `%TEMP%`), этого не позволяет,
+`bind` проходит, файла нет, и `connect` возвращает «Invalid argument». Обычные сетевые
+соединения при этом работают, поэтому легко подумать на файрвол.
 
 Лечится переносом сокетов в каталог, где они создаются. Свойство нужно **всем**
 процессам сборки — клиенту, демону Gradle и демону Kotlin, — поэтому проще всего
-задать его переменной окружения:
+задать его переменной окружения (каталог должен существовать):
 
 ```
 JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\Users\<вы>\.gradle\sockets
 ```
 
 Класть его в `org.gradle.jvmargs` пользовательского `~/.gradle/gradle.properties`
-бесполезно: проектный `gradle.properties` эту строку целиком перекрывает.
-Каталог должен существовать. Побочный эффект переменной — строка
-«Picked up JAVA_TOOL_OPTIONS» в выводе каждой Java-программы.
+бесполезно: проектный `gradle.properties` эту строку целиком перекрывает. Побочный
+эффект — строка «Picked up JAVA_TOOL_OPTIONS» в выводе каждой Java-программы.

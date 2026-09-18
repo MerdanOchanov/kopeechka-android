@@ -110,24 +110,62 @@ object SmsParse {
 
         val expense = words(src.expenseWords).ifEmpty { words(SmsWords.EXPENSE) }
         val income = words(src.incomeWords).ifEmpty { words(SmsWords.INCOME) }
-        val incomeAt = income.mapNotNull { w -> low.indexOf(w).takeIf { it >= 0 } }.minOrNull()
-        val expenseAt = expense.mapNotNull { w -> low.indexOf(w).takeIf { it >= 0 } }.minOrNull()
-        // если встретились оба вида слов, верим тому, что стоит раньше
+        val incomeHit = income.mapNotNull { w -> low.indexOf(w).takeIf { it >= 0 }?.let { it to w } }.minByOrNull { it.first }
+        val expenseHit = expense.mapNotNull { w -> low.indexOf(w).takeIf { it >= 0 }?.let { it to w } }.minByOrNull { it.first }
+
+        // Сумма рядом с валютой; нет валюты — первое число с копейками после
+        // ключевого слова: «Sowda 115.00 ***6415» (Türkmenbaşy bank валюту не пишет).
+        val keyword = listOfNotNull(incomeHit, expenseHit).minByOrNull { it.first }
+        val money = findMoney(text)
+            ?: keyword?.let { (at, w) -> amountAfter(text, at + w.length) }
+            ?: return null
+
+        // Знак у суммы надёжнее слов: «Pulyn mocberi -1.15 TMT» — расход,
+        // хотя слов о расходе в сообщении нет (так пишет Rysgal).
         val isIncome = when {
-            incomeAt != null && expenseAt != null -> incomeAt < expenseAt
-            incomeAt != null -> true
-            expenseAt != null -> false
+            money.sign < 0 -> false
+            money.sign > 0 -> true
+            // если встретились оба вида слов, верим тому, что стоит раньше
+            incomeHit != null && expenseHit != null -> incomeHit.first < expenseHit.first
+            incomeHit != null -> true
+            expenseHit != null -> false
             else -> return null
         }
-
-        val money = findAmount(text) ?: return null
         return ParsedSms(
-            amount = money.first,
-            cur = money.second.ifBlank { defaultCur },
+            amount = money.value,
+            cur = money.cur.ifBlank { defaultCur },
             income = isIncome,
             title = merchant(text).ifBlank { src.name },
             mask = findMask(text),
         )
+    }
+
+    /** Сумма, валюта и знак перед числом: −1 — минус, +1 — плюс, 0 — без знака. */
+    private data class Money(val value: Double, val cur: String, val sign: Int)
+
+    private fun signBefore(text: String, start: Int): Int {
+        var i = start - 1
+        while (i >= 0 && text[i] == ' ') i--
+        return when (if (i >= 0) text[i] else ' ') {
+            '-', '−', '–' -> -1
+            '+' -> 1
+            else -> 0
+        }
+    }
+
+    private fun findMoney(text: String): Money? {
+        val m = AMOUNT.findAll(text).firstOrNull() ?: return null
+        val value = m.groupValues[1].replace(SPACES, "").replace(',', '.').toDoubleOrNull() ?: return null
+        if (value <= 0) return null
+        return Money(value, currencyOf(m.groupValues[2].trim()), signBefore(text, m.range.first))
+    }
+
+    /** Первое число с копейками после позиции: даты и время так не спутать с суммой. */
+    private fun amountAfter(text: String, from: Int): Money? {
+        val m = BARE_AMOUNT.find(text, from) ?: return null
+        val value = m.groupValues[1].replace(SPACES, "").replace(',', '.').toDoubleOrNull() ?: return null
+        if (value <= 0) return null
+        return Money(value, "", signBefore(text, m.range.first))
     }
 
     /**
@@ -135,19 +173,17 @@ object SmsParse {
      * ещё дата, остаток и четыре цифры карты, и любое из них можно принять
      * за сумму, если искать просто число.
      */
-    fun findAmount(text: String): Pair<Double, String>? {
-        val m = AMOUNT.findAll(text).firstOrNull() ?: return null
-        val digits = m.groupValues[1].replace(SPACES, "").replace(',', '.')
-        val value = digits.toDoubleOrNull() ?: return null
-        if (value <= 0) return null
-        return value to currencyOf(m.groupValues[2].trim())
-    }
+    fun findAmount(text: String): Pair<Double, String>? = findMoney(text)?.let { it.value to it.cur }
 
     fun findMask(text: String): String = MASK.find(text)?.groupValues?.get(1).orEmpty()
 
-    /** Название магазина: банки пишут его после суммы или в кавычках. */
+    /** Название магазина: банки пишут его после суммы, в кавычках или прямо подписывают. */
     private fun merchant(text: String): String {
         QUOTED.find(text)?.let { return it.groupValues[1].trim().take(40) }
+        // «satyjyn ady: TMCELL,» — Rysgal подписывает продавца
+        NAMED_MERCHANT.find(text)?.let { return it.groupValues[1].trim().take(40) }
+        // «***6415 185360 TEL. GURBANOW A.B., TM» — после карты и номера терминала
+        AFTER_MASK.find(text)?.let { return it.groupValues[1].trim().trimEnd('.').take(40) }
         val tail = MERCHANT.find(text)?.groupValues?.get(1)?.trim().orEmpty()
         return tail.take(40)
     }
@@ -169,6 +205,16 @@ object SmsParse {
     )
 
     private val MASK = Regex("\\*{1,4}(\\d{4})")
+
+    /** Число обязательно с копейками: «115.00», «1 050,41». */
+    private val BARE_AMOUNT = Regex("(\\d{1,3}(?:[\\s ]\\d{3})+[.,]\\d{2}|\\d+[.,]\\d{2})(?!\\d)")
+
+    private val NAMED_MERCHANT = Regex(
+        "(?:satyjyn ady|satyjy ady|merchant|продавец|магазин)\\s*:\\s*([^,.;]{2,40})",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val AFTER_MASK = Regex("\\*{2,4}\\d{4}\\s+\\d{3,}\\s+([^,;]{2,40}),")
 
     private val QUOTED = Regex("[\"«]([^\"»]{2,40})[\"»]")
 
@@ -197,7 +243,7 @@ object SmsPresets {
     data class Preset(val name: String, val expense: String, val income: String, val ignore: String)
 
     private const val TM_EXPENSE =
-        "tölendi, töleg, satyn alyş, alyş, çykaryldy, nagt pul, geçirildi kartdan, " +
+        "tölendi, töleg, satyn alyş, alyş, sowda, çykaryldy, nagt pul, geçirildi kartdan, " +
             "списание, оплата, покупка, снятие, перевод с карты"
     private const val TM_INCOME =
         "gelip gowuşdy, geçirildi hasabyňyza, hasabyňyza, girdeji, zachislenie, " +
@@ -208,7 +254,11 @@ object SmsPresets {
     val TURKMENISTAN = listOf(
         Preset("Halkbank", TM_EXPENSE, TM_INCOME, TM_IGNORE),
         Preset("Senagat", TM_EXPENSE, TM_INCOME, TM_IGNORE),
-        Preset("Rysgal", TM_EXPENSE, TM_INCOME, TM_IGNORE),
+        // Rysgal: покупка по карте начинается с «Kartyn belgisi … satyjy», а пополнение —
+        // короткое «Pulyn mocberi 1396.8 TMT»; у короткого списания сумма с минусом.
+        Preset("Rysgal", "kartyn belgisi, satyjy, e-commerce, " + TM_EXPENSE, "pulyn mocberi, pulyň möçberi, " + TM_INCOME, TM_IGNORE),
+        // Türkmenbaşy: «Sowda 115.00 ***6415 … galyndy 1050.41» — без валюты.
+        Preset("Türkmenbaşy", TM_EXPENSE, TM_INCOME, TM_IGNORE),
         Preset("Türkmenistan", TM_EXPENSE, TM_INCOME, TM_IGNORE),
         Preset("Daýhanbank", TM_EXPENSE, TM_INCOME, TM_IGNORE),
         Preset("TDDB", TM_EXPENSE, TM_INCOME, TM_IGNORE),

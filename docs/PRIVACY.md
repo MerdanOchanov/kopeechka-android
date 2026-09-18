@@ -1,6 +1,6 @@
 # Политика конфиденциальности «Копеечки»
 
-*Действует с 17 сентября 2026 года.*
+*Действует с 18 сентября 2026 года.*
 
 «Копеечка» — приложение для учёта личных и семейных финансов. У приложения
 **нет своего сервера**: разработчик не получает, не хранит и не видит ваши данные.
@@ -21,8 +21,12 @@
 само приложение (`drive.file`), — остальное содержимое Диска приложению недоступно.
 Ключи ИИ-провайдеров в копию не попадают.
 
+**Копия файлом.** Файл сохраняется туда, куда вы укажете, или отправляется
+через выбранное вами приложение (мессенджер, почта).
+
 **ИИ-советник и чеки по фото.** Работают, только если вы указали свой ключ выбранного
-провайдера (Anthropic, OpenAI, Google или адрес собственного сервера). Когда вы задаёте
+провайдера (Anthropic, OpenAI, Google, Сбер — GigaChat, Яндекс — YandexGPT или адрес
+собственного сервера). Когда вы задаёте
 вопрос советнику, провайдеру отправляются те данные, которые вы отметили в настройках
 советника. Когда вы распознаёте чек, провайдеру отправляется фотография чека
 и список ваших категорий. Данные обрабатываются по правилам этого провайдера.
@@ -36,6 +40,15 @@
 
 **Экспорт CSV.** Файл сохраняется туда, куда вы укажете в системном диалоге.
 
+**Курсы валют.** По кнопке «Официальные курсы» приложение запрашивает курсы с сайта
+Банка России, Национального банка Казахстана или Центрального банка Узбекистана.
+Ваших данных в этом запросе нет.
+
+**Проверка обновлений** (только версия с GitHub). Приложение узнаёт номер последней
+версии у GitHub. Ваших данных в этом запросе нет. Версия из Google Play этого не делает.
+
+**Чеки по QR-коду** разбираются на телефоне и никуда не отправляются.
+
 ## Разрешения
 
 - **Интернет** — для резервных копий, ИИ-советника и общего бюджета.
@@ -46,6 +59,10 @@
 - **СМС** — только в версии, распространяемой через GitHub. Сообщения банков
   разбираются на телефоне и никуда не отправляются. В версии из Google Play
   этой функции и разрешения нет.
+- **Доступ к уведомлениям** (Android) — только если вы сами включите его в настройках
+  телефона. Приложение смотрит уведомления банковских приложений, чтобы предложить
+  операцию; текст уведомлений разбирается на телефоне, никуда не отправляется
+  и в резервную копию не попадает. Отключить можно в любой момент там же.
 
 ## Удаление данных
 
@@ -76,16 +93,23 @@ Data leaves the phone only when you turn on a feature that needs it:
 
 - **Google Drive backups** go to a folder in your own Drive; the app can only access
   files it created (`drive.file`). AI keys are never included.
-- **AI advisor and receipt scanning** work only with your own provider key. Your selected
-  data, or the receipt photo with your category list, is sent to that provider and handled
+- **AI advisor and receipt scanning** work only with your own provider key (Anthropic,
+  OpenAI, Google, Sber GigaChat, Yandex YandexGPT or your own server). Your selected data,
+  or the receipt photo with your category list, is sent to that provider and handled
   under its terms.
+- **Exchange rates** are requested from a central bank website when you tap the button;
+  the request contains none of your data. The GitHub build also checks GitHub for a newer
+  version; the Google Play build does not.
+- **Backup to a file** goes wherever you save or share it.
 - **Shared budget** sends your accounts and operations to the other member through the
   storage you chose (your Google Drive, your WebDAV server) or directly over your local
   network. Drafts, SMS rules and keys are not shared.
 - **CSV export** is saved where you choose.
 
 The app does not request camera access directly: photos come from the system camera or
-picker. SMS reading exists only in the GitHub build and never leaves the phone; the
-Google Play build has neither the feature nor the permission.
+picker; receipt QR codes are read on the phone. SMS reading exists only in the GitHub build
+and never leaves the phone; the Google Play build has neither the feature nor the permission.
+Bank notification reading (Android) works only after you grant notification access in the
+system settings; notifications are parsed on the phone and never sent anywhere.
 
 Uninstalling the app deletes its data. Contact: https://github.com/MerdanOchanov/kopeechka-android/issues

@@ -10,10 +10,15 @@
 которые само создало. Остальной Диск ему недоступен. Это «несекретная» область,
 поэтому проверка приложения в Google не требуется.
 
-Токен доступа берётся через `Identity.getAuthorizationClient` (Google Play services),
-дальше запросы идут напрямую в Drive REST v3 через OkHttp — см. `net/DriveBackup.kt`.
+Токен доступа на Android берётся через `Identity.getAuthorizationClient` (Google Play
+services, `app/.../net/DriveBackup.kt`), дальше запросы идут в Drive REST v3 из общего
+кода (`shared/.../net/DriveApi.kt`, Ktor). Тот же Диск служит одним из способов обмена
+в общем бюджете — см. [SYNC.md](SYNC.md).
 
-**API-ключи ИИ в копию не попадают** — они лежат отдельно, зашифрованные Android Keystore.
+**API-ключи ИИ в копию не попадают** — они лежат отдельно, в Android Keystore / iOS Keychain.
+
+Если Google недоступен, есть **копия файлом**: Настройки → Резервная копия →
+«Сохранить» или «Отправить», восстановление — «Восстановить из файла».
 
 ## Настройка для себя
 
@@ -30,8 +35,14 @@ Google пускает приложение к Диску, только если 
    не предлагает скачать JSON — это нормально, скачивать нечего, в коде client_id не нужен.
    Если по ошибке создать Desktop-клиент, диалог выбора аккаунта покажется, но после
    выбора Google молча откажет — это и есть код 10.
-   - Package name: `app.kopeechka.finance`
-   - SHA-1 ключа подписи. Для отладочной сборки:
+   - Package name — свой у каждого варианта сборки:
+
+     | Вариант | Package name | SHA-1 |
+     | --- | --- | --- |
+     | `full` (APK с GitHub) | `app.kopeechka.finance` | отладочного ключа той машины, где собран APK |
+     | `play` (Google Play) | `com.arassanusga.kopeechka` | ключа подписи Play App Signing: `DB:86:CA:0E:5D:55:5B:D8:9F:71:18:D4:51:96:55:A7:F2:82:E9:51` |
+
+   - SHA-1 отладочного ключа:
      ```bash
      keytool -list -v -keystore %USERPROFILE%\.android\debug.keystore -alias androiddebugkey -storepass android -keypass android
      ```
