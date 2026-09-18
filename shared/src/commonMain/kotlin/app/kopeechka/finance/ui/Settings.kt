@@ -33,6 +33,7 @@ import app.kopeechka.finance.AppViewModel
 import app.kopeechka.finance.CurSheet
 import app.kopeechka.finance.Page
 import app.kopeechka.finance.data.Calc
+import app.kopeechka.finance.data.RateMode
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.decimalString
 import app.kopeechka.finance.data.debtStats
@@ -297,6 +298,20 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
     ScreenColumn(gap = 16.dp) {
         PageHeader(l.t("cur.title")) { vm.page = null }
         Muted(l.t("cur.note", Currencies.info(c.main).name), 11.5f, color = col.n700)
+
+        // два курса: там, где официальный и рыночный расходятся в разы
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Kicker(l.t("rate.modeTitle"))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(l.t("rate.bank"), c.s.rateMode != RateMode.MARKET, { vm.setRateMode(RateMode.BANK) }, modifier = Modifier.weight(1f))
+                Chip(l.t("rate.market"), c.s.rateMode == RateMode.MARKET, { vm.setRateMode(RateMode.MARKET) }, modifier = Modifier.weight(1f))
+            }
+            Muted(
+                if (c.s.rateMode == RateMode.MARKET && c.s.marketRates.isEmpty()) l.t("rate.marketEmpty") else l.t("rate.modeNote"),
+                11f,
+            )
+        }
+
         Column {
             c.currencies.forEach { code ->
                 val info = Currencies.info(code)
@@ -322,7 +337,17 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
                         if (isBase) {
                             Text(l.t("cur.base"), style = T.b(11.5.sp, col.n600))
                         } else {
-                            RateField(vm, code, c.rate(code), c.main)
+                            RateField(vm, code, c.bankRate(code), c.main)
+                        }
+                    }
+                    if (!isBase) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                l.t("rate.marketFor", code),
+                                style = T.b(11.5.sp, col.n600),
+                                modifier = Modifier.weight(1f),
+                            )
+                            MarketRateField(vm, code, c.s.marketRates[code], c.main)
                         }
                     }
                     if (!isBase && code != c.main && used == 0) {
@@ -336,6 +361,19 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
         }
         AddButton(l.t("cur.add")) { vm.currencyPicker = true }
         Muted(l.t("cur.footer"), 11f)
+    }
+}
+
+/** Рыночный курс: пустое поле — совпадает с банковским. */
+@Composable
+private fun MarketRateField(vm: AppViewModel, code: String, rate: Double?, mainCur: String) {
+    val col = T.c
+    var text by remember(code) { mutableStateOf(rate?.let { fmtRate(it) }.orEmpty()) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.width(104.dp)) {
+            Field(null, text, { text = it; vm.setMarketRate(code, it) }, numeric = true, placeholder = T.l.t("rate.same"))
+        }
+        Text(Currencies.sym(mainCur), style = T.b(14.sp, col.n700))
     }
 }
 

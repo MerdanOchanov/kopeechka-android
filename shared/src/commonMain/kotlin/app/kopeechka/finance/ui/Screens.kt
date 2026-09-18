@@ -208,7 +208,10 @@ fun HomeScreen(vm: AppViewModel, c: Calc) {
         ) {
             val hello = c.s.userName.trim()
             Text(
-                ((if (hello.isNotEmpty()) "$hello · " else "") + l.t("home.total", Currencies.info(c.main).name)).uppercase(),
+                (
+                    (if (hello.isNotEmpty()) "$hello · " else "") + l.t("home.total", Currencies.info(c.main).name) +
+                        (if (c.byMarket) " · " + l.t("rate.byMarketShort") else "")
+                    ).uppercase(),
                 style = T.b(10.sp, col.a300, 0.18.em),
             )
             Spacer(Modifier.height(4.dp))

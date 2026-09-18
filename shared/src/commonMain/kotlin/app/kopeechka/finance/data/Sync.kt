@@ -171,13 +171,14 @@ object Sync {
     // ——— внутреннее ———
 
     /** Денежная модель — единственная часть настроек, общая для двоих. */
-    private fun moneyOf(s: Settings) = listOf(s.mainCur, s.rates, s.currencyCodes, s.customCurrencies)
+    private fun moneyOf(s: Settings) = listOf(s.mainCur, s.rates, s.marketRates, s.currencyCodes, s.customCurrencies)
 
     private fun mergeMoney(mine: Settings, theirs: Settings): Settings =
         if (theirs.moneyAt > mine.moneyAt) {
             mine.copy(
                 mainCur = theirs.mainCur,
                 rates = theirs.rates,
+                marketRates = theirs.marketRates,
                 currencyCodes = theirs.currencyCodes,
                 customCurrencies = theirs.customCurrencies,
                 moneyAt = theirs.moneyAt,

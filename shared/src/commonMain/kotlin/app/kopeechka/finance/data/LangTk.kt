@@ -415,6 +415,14 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "goal.putSum" to "{0} ýygna",
 
     // ——— pul birlikleri ———
+    "rate.modeTitle" to "Jemi haýsy hümmet boýunça",
+    "rate.bank" to "Bank",
+    "rate.market" to "Bazar",
+    "rate.modeNote" to "Bazar hümmetini aşakda walýuta üçin giriziň. Girizilmedik ýerinde bank hümmeti alynýar. Hakyky çalyşyk hümmeti her geçirimde saklanýar.",
+    "rate.marketEmpty" to "Hiç bir walýutanyň bazar hümmeti entek ýok, jemler bank hümmeti boýunça.",
+    "rate.marketFor" to "Bazar hümmeti {0}",
+    "rate.same" to "bank ýaly",
+    "rate.byMarketShort" to "bazar hümmeti boýunça",
     "cur.title" to "Pul birlikleri we hümmetler",
     "cur.note" to "Hümmet — başga pul birliginiň bir birliginiň esasy pul birligine ({0}) görä bahasy. Esasy pul birligi — şol bir wagtda esas: onuň hümmeti hemişe 1. Hümmetler elde bellenýär, programma olar üçin internete çykmaýar.",
     "cur.base" to "esas",

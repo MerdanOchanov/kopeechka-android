@@ -414,6 +414,14 @@ If a field is not visible, leave an empty string, and return total only if you a
     "goal.putSum" to "Set aside {0}",
 
     // ——— currencies ———
+    "rate.modeTitle" to "Count totals at the rate",
+    "rate.bank" to "Bank",
+    "rate.market" to "Market",
+    "rate.modeNote" to "Set the market rate for a currency below. Where it is empty, the bank rate is used. The real exchange rate is kept in every transfer.",
+    "rate.marketEmpty" to "No currency has a market rate yet, so totals still use the bank rate.",
+    "rate.marketFor" to "Market rate {0}",
+    "rate.same" to "as bank",
+    "rate.byMarketShort" to "at market rate",
     "cur.title" to "Currencies and rates",
     "cur.note" to "A rate is how many units of the main currency ({0}) one unit of another costs. The main currency is the base: its own rate is always 1. Rates are set by hand, the app never goes online for them.",
     "cur.base" to "base",

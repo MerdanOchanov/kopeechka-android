@@ -43,6 +43,8 @@ import app.kopeechka.finance.data.OrderStatus
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.data.Product
+import app.kopeechka.finance.data.RateMode
+import app.kopeechka.finance.data.rebaseRates
 import app.kopeechka.finance.data.RequestStatus
 import app.kopeechka.finance.data.Settings
 import app.kopeechka.finance.data.SpendRequest
@@ -668,12 +670,8 @@ class AppViewModel(
 
     private fun applyMainCur(code: String) {
         store.update { s ->
-            val c = Calc(s)
-            val div = c.rate(code).takeIf { it > 0 } ?: 1.0
-            val old = s.settings.mainCur
-            val rates = s.settings.rates.mapValues { (_, v) -> v / div } +
-                (code to 1.0) +
-                (old to c.rate(old) / div)
+            val div = Calc(s).bankRate(code).takeIf { it > 0 } ?: 1.0
+            val (rates, market) = rebaseRates(s.settings, code)
             s.copy(
                 categories = s.categories.map { it.copy(limitBase = it.limitBase / div) },
                 // цены прайса тоже хранятся в основной валюте; суммы заказов — в своих
@@ -681,6 +679,7 @@ class AppViewModel(
                 settings = s.settings.copy(
                     mainCur = code,
                     rates = rates,
+                    marketRates = market,
                     currencyCodes = (listOf(code) + s.settings.currencyCodes).distinct(),
                 ),
             )
@@ -718,6 +717,17 @@ class AppViewModel(
         settings { it.copy(rates = it.rates + (code to v)) }
     }
 
+    /** Рыночный курс. Пустое поле — рынок совпадает с банком. */
+    fun setMarketRate(code: String, text: String) {
+        val clean = text.replace(',', '.').replace(" ", "")
+        if (clean.isEmpty()) return settings { it.copy(marketRates = it.marketRates - code) }
+        val v = clean.toDoubleOrNull() ?: return
+        if (v <= 0) return
+        settings { it.copy(marketRates = it.marketRates + (code to v)) }
+    }
+
+    fun setRateMode(mode: String) = settings { it.copy(rateMode = mode) }
+
     /**
      * Курс пары прямо в операции: «1 from = x to».
      * Меняется курс небазовой валюты, доллар остаётся базой.
@@ -726,9 +736,13 @@ class AppViewModel(
         val x = text.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: return
         if (x <= 0 || from == to) return
         val c = calc
+        val market = c.byMarket
+        fun put(code: String, v: Double) = settings {
+            if (market) it.copy(marketRates = it.marketRates + (code to v)) else it.copy(rates = it.rates + (code to v))
+        }
         when {
-            from != c.main -> settings { it.copy(rates = it.rates + (from to x * c.rate(to))) }
-            to != c.main -> settings { it.copy(rates = it.rates + (to to c.rate(from) / x)) }
+            from != c.main -> put(from, x * c.rate(to))
+            to != c.main -> put(to, c.rate(from) / x)
         }
     }
 
@@ -778,6 +792,7 @@ class AppViewModel(
             s.copy(
                 currencyCodes = s.currencyCodes.filterNot { it == code },
                 customCurrencies = s.customCurrencies.filterNot { it.code == code },
+                marketRates = s.marketRates - code,
             )
         }
         say("msg.curRemoved", code)

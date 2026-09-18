@@ -46,7 +46,15 @@ class Calc(
     val todayDay = today.toEpochDay()
 
     /** Курс: сколько единиц основной валюты стоит одна единица `c`. У основной всегда 1. */
-    fun rate(c: String): Double = if (c == main) 1.0 else s.rates[c] ?: Currencies.hintRate(c, main)
+    fun rate(c: String): Double = if (c == main) 1.0 else if (byMarket) marketRate(c) else bankRate(c)
+
+    /** Итоги считаются по рыночному курсу, и хотя бы у одной валюты он задан. */
+    val byMarket: Boolean get() = s.rateMode == RateMode.MARKET && s.marketRates.isNotEmpty()
+
+    fun bankRate(c: String): Double = if (c == main) 1.0 else s.rates[c] ?: Currencies.hintRate(c, main)
+
+    /** Рыночный курс; если он не задан, совпадает с банковским. */
+    fun marketRate(c: String): Double = if (c == main) 1.0 else s.marketRates[c] ?: bankRate(c)
     fun conv(v: Double, from: String, to: String) = v * rate(from) / rate(to)
     fun toMain(v: Double, cur: String) = conv(v, cur, main)
     fun fmt(v: Double, cur: String) = Currencies.fmt(v, cur, s.showKopecks)
@@ -288,4 +296,25 @@ class Calc(
     companion object {
         val ROMAN = listOf("I", "II", "III", "IV")
     }
+}
+
+/**
+ * Курсы после смены основной валюты на [code].
+ *
+ * Банковские и рыночные курсы делятся каждый на свой курс новой основной валюты.
+ * Если разделить рыночные на банковский делитель, разница между курсами
+ * исчезнет — а ради неё они и заведены.
+ */
+fun rebaseRates(s: Settings, code: String): Pair<Map<String, Double>, Map<String, Double>> {
+    val old = s.mainCur
+    fun bank(c: String) = if (c == old) 1.0 else s.rates[c] ?: Currencies.hintRate(c, old)
+    fun market(c: String) = if (c == old) 1.0 else s.marketRates[c] ?: bank(c)
+
+    val div = bank(code).takeIf { it > 0 } ?: 1.0
+    val rates = s.rates.mapValues { (_, v) -> v / div } + (old to 1.0 / div) + (code to 1.0)
+
+    if (s.marketRates.isEmpty()) return rates to emptyMap()
+    val mdiv = market(code).takeIf { it > 0 } ?: div
+    val marketRates = (s.marketRates.mapValues { (_, v) -> v / mdiv } + (old to 1.0 / mdiv)) - code
+    return rates to marketRates
 }

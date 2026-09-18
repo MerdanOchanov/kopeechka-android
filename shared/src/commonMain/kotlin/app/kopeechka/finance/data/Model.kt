@@ -6,6 +6,12 @@ import kotlinx.serialization.Serializable
 const val CAT_TRANSFER = "transfer"
 const val CAT_GOAL = "goal"
 
+/** Каким курсом переводить валюты в основную. */
+object RateMode {
+    const val BANK = "bank"
+    const val MARKET = "market"
+}
+
 @Serializable
 data class Account(
     val id: String,
@@ -92,8 +98,16 @@ data class Settings(
     val dark: Boolean = false,
     /** "auto" — как в системе, либо "ru" / "en" / "tk". */
     val lang: String = "auto",
-    /** Сколько рублей стоит единица валюты. */
+    /** Сколько основной валюты стоит единица валюты — банковский (официальный) курс. */
     val rates: Map<String, Double> = Currencies.DEFAULT_RATES,
+    /**
+     * Рыночный курс там, где он расходится с банковским. В Туркменистане доллар
+     * по официальному курсу стоит в разы дешевле, чем на руках, и один курс
+     * на валюту делает итоги бессмысленными. Нет записи — рынок совпадает с банком.
+     */
+    val marketRates: Map<String, Double> = emptyMap(),
+    /** По какому курсу считать итоги: RateMode.BANK или RateMode.MARKET. Личная настройка. */
+    val rateMode: String = RateMode.BANK,
     /** Валюты, включённые в приложении (первая всегда RUB — база курсов). */
     val currencyCodes: List<String> = Currencies.DEFAULT_CODES,
     /** Валюты, заведённые вручную сверх каталога. */
