@@ -108,6 +108,9 @@ data class Settings(
     val marketRates: Map<String, Double> = emptyMap(),
     /** По какому курсу считать итоги: RateMode.BANK или RateMode.MARKET. Личная настройка. */
     val rateMode: String = RateMode.BANK,
+    /** Когда и откуда последний раз брали официальные курсы: для строки «обновлено». */
+    val ratesAt: Long = 0,
+    val ratesSource: String = "",
     /** Валюты, включённые в приложении (первая всегда RUB — база курсов). */
     val currencyCodes: List<String> = Currencies.DEFAULT_CODES,
     /** Валюты, заведённые вручную сверх каталога. */

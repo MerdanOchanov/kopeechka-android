@@ -72,6 +72,7 @@ import app.kopeechka.finance.data.orderCur
 import app.kopeechka.finance.data.orderTotal
 import app.kopeechka.finance.data.product
 import app.kopeechka.finance.net.Ai
+import app.kopeechka.finance.net.BankRates
 import app.kopeechka.finance.net.AiImage
 import app.kopeechka.finance.net.AiError
 import app.kopeechka.finance.net.DriveApi
@@ -766,6 +767,37 @@ class AppViewModel(
     }
 
     fun setRateMode(mode: String) = settings { it.copy(rateMode = mode) }
+
+    /** Идёт загрузка официальных курсов. */
+    var ratesBusy by mutableStateOf(false)
+        private set
+
+    /**
+     * Банковские курсы из центробанка. Рыночные не трогаем: их не публикует
+     * никто, и там, где они расходятся с официальными, человек знает их сам.
+     */
+    fun updateBankRates(source: BankRates.Source) {
+        if (ratesBusy) return
+        ratesBusy = true
+        viewModelScope.launch {
+            try {
+                val raw = BankRates.fetch(source)
+                val s = store.current.settings
+                val fresh = BankRates.toMain(raw, s.mainCur, calc.currencies)
+                    ?: return@launch say("rates.noMain", s.mainCur, l.t("rates.src." + source.name))
+                if (fresh.isEmpty()) return@launch say("rates.nothing")
+                val now = Clock.System.now().toEpochMilliseconds()
+                settings { it.copy(rates = it.rates + fresh, ratesAt = now, ratesSource = source.name) }
+                say("rates.updated", fresh.size)
+            } catch (e: SyncError) {
+                say(e.key)
+            } catch (e: Exception) {
+                say("rates.err.offline")
+            } finally {
+                ratesBusy = false
+            }
+        }
+    }
 
     /**
      * Курс пары прямо в операции: «1 from = x to».

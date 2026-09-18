@@ -40,6 +40,7 @@ import app.kopeechka.finance.data.debtStats
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.net.Ai
 import app.kopeechka.finance.net.backupMillis
+import app.kopeechka.finance.net.BankRates
 import app.kopeechka.finance.net.formatBackupTime
 import app.kopeechka.finance.ui.theme.T
 import kotlin.math.abs
@@ -376,6 +377,25 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
         }
         AddButton(l.t("cur.add")) { vm.currencyPicker = true }
         Muted(l.t("cur.footer"), 11f)
+
+        // официальные курсы: банковские подтягиваются, рыночные остаются ручными
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionTitle(l.t("rates.title"))
+            Muted(l.t("rates.note"), 11.5f, color = col.n700)
+            ChipFlow {
+                BankRates.Source.entries.forEach { src ->
+                    Chip(l.t("rates.src." + src.name), false, { vm.updateBankRates(src) })
+                }
+            }
+            Muted(
+                when {
+                    vm.ratesBusy -> l.t("common.wait")
+                    c.s.ratesAt > 0 -> l.t("rates.when", formatBackupTime(c.s.ratesAt, l), l.t("rates.src." + c.s.ratesSource))
+                    else -> l.t("rates.never")
+                },
+                11f,
+            )
+        }
     }
 }
 
