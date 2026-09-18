@@ -143,6 +143,15 @@ fun SmsEditOverlay(vm: AppViewModel, c: Calc, e: SmsEdit) {
             note = l.t("sms.ignoreNote"),
         )
 
+        Field(
+            l.t("sms.cashFee"),
+            e.cashFee,
+            { vm.smsEdit = e.copy(cashFee = it) },
+            numeric = true,
+            placeholder = "0",
+            note = l.t("sms.cashFeeNote"),
+        )
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(l.t("sms.auto"), style = T.b(13.sp, col.text))

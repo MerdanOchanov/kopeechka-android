@@ -113,10 +113,29 @@ fun InboxEditSheet(vm: AppViewModel, c: Calc, item: InboxItem) {
                 Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == item.accId, { vm.editInbox { it.copy(accId = a.id) } })
             }
         }
-        Kicker(l.t("inbox.cat"))
-        ChipFlow {
-            c.d.categories.filter { it.income == item.income }.forEach { cat ->
-                Chip(cat.name, cat.id == item.cat, { vm.editInbox { it.copy(cat = cat.id) } })
+        if (item.cash) {
+            // снятие наличных: куда легли деньги — или это всё-таки трата
+            Kicker(l.t("sms.cashTo"))
+            ChipFlow {
+                c.d.accounts.filter { it.id != item.accId }.forEach { a ->
+                    Chip("${a.name} · ${Currencies.sym(a.cur)}", a.id == item.toAcc, { vm.editInbox { it.copy(toAcc = a.id) } })
+                }
+                Chip(l.t("sms.cashAsExpense"), item.toAcc.isBlank(), { vm.editInbox { it.copy(toAcc = "") } })
+            }
+            Field(
+                l.t("sms.fee", Currencies.sym(cur)),
+                if (item.fee > 0) vm.numText(item.fee) else "",
+                { t -> vm.editInbox { it.copy(fee = vm.numOf(t)) } },
+                numeric = true,
+                placeholder = "0",
+            )
+        }
+        if (!item.cash || item.toAcc.isBlank()) {
+            Kicker(l.t("inbox.cat"))
+            ChipFlow {
+                c.d.categories.filter { it.income == item.income }.forEach { cat ->
+                    Chip(cat.name, cat.id == item.cat, { vm.editInbox { it.copy(cat = cat.id) } })
+                }
             }
         }
         if (item.raw.isNotBlank()) {

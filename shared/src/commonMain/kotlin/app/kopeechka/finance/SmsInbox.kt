@@ -1,6 +1,8 @@
 package app.kopeechka.finance
 
 import app.kopeechka.finance.data.AppData
+import app.kopeechka.finance.data.Account
+import app.kopeechka.finance.data.CAT_TRANSFER
 import app.kopeechka.finance.data.INBOX_PUSH
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
@@ -45,21 +47,38 @@ object SmsInbox {
         if (alreadyKnown(d, parsed, target.id, day)) return null
 
         val cat = guessCategory(d, parsed)
+        // Снятие наличных — перевод с карты в кошелёк той же валюты, а не трата.
+        // Настоящий расход здесь только комиссия банка.
+        val wallet = if (parsed.cash && parsed.cur == target.cur) walletFor(d, target) else null
+        val fee = if (parsed.cash && src.cashFee > 0) round2(parsed.amount * src.cashFee / 100) else 0.0
+        val title = if (parsed.cash) l.t("sms.cashTitle") else parsed.title
         store.update { s ->
             if (src.auto) {
+                val main = if (wallet != null) {
+                    Tx(
+                        id = s.nextId, date = day, title = title, cat = CAT_TRANSFER, acc = target.id,
+                        amount = -parsed.amount, note = l.t("sms.noteAuto", src.name),
+                        toAcc = wallet.id, toAmount = parsed.amount,
+                    )
+                } else {
+                    Tx(
+                        id = s.nextId,
+                        date = day,
+                        title = title,
+                        cat = cat,
+                        acc = target.id,
+                        amount = if (parsed.income) parsed.amount else -parsed.amount,
+                        note = l.t("sms.noteAuto", src.name),
+                    )
+                }
+                val feeTx = if (fee > 0) {
+                    Tx(id = s.nextId + 1, date = day, title = l.t("sms.feeTitle"), cat = feeCategory(s), acc = target.id, amount = -fee)
+                } else {
+                    null
+                }
                 s.copy(
-                    txs = listOf(
-                        Tx(
-                            id = s.nextId,
-                            date = day,
-                            title = parsed.title,
-                            cat = cat,
-                            acc = target.id,
-                            amount = if (parsed.income) parsed.amount else -parsed.amount,
-                            note = l.t("sms.noteAuto", src.name),
-                        ),
-                    ) + s.txs,
-                    nextId = s.nextId + 1,
+                    txs = listOfNotNull(feeTx, main) + s.txs,
+                    nextId = s.nextId + if (feeTx != null) 2 else 1,
                 )
             } else {
                 s.copy(
@@ -69,21 +88,37 @@ object SmsInbox {
                             source = if (fromPush) INBOX_PUSH else INBOX_SMS,
                             at = at,
                             date = day,
-                            title = parsed.title,
+                            title = title,
                             amount = parsed.amount,
                             cur = parsed.cur,
                             income = parsed.income,
                             accId = target.id,
                             cat = cat,
                             raw = text.take(300),
+                            cash = parsed.cash,
+                            toAcc = wallet?.id.orEmpty(),
+                            fee = fee,
                         ),
                     ) + s.inbox,
                     nextId = s.nextId + 1,
                 )
             }
         }
-        return SmsResult(parsed.title, src.auto)
+        return SmsResult(title, src.auto)
     }
+
+    /** Кошелёк для наличных: счёт типа «Кошелёк» в той же валюте, что и карта. */
+    fun walletFor(d: AppData, card: Account): Account? {
+        val cashTypes = Lang.ALL.map { it.t("acc.type.cash").lowercase() }.toSet()
+        return d.accounts.firstOrNull { it.id != card.id && it.cur == card.cur && it.type.lowercase() in cashTypes }
+    }
+
+    /** Категория комиссии: «Прочее», а если её удалили — первая категория расходов. */
+    fun feeCategory(d: AppData): String =
+        d.categories.firstOrNull { it.id == "other" && !it.income }?.id
+            ?: d.categories.firstOrNull { !it.income }?.id.orEmpty()
+
+    private fun round2(v: Double) = kotlin.math.round(v * 100) / 100
 
     /** Разбор истории при включении: возвращает, сколько сообщений пригодилось. */
     fun handleAll(store: Storage, messages: List<app.kopeechka.finance.data.SmsMessage>, l: Lang): Int =

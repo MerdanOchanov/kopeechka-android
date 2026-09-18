@@ -35,6 +35,11 @@ data class SmsSource(
      */
     val auto: Boolean = false,
     val enabled: Boolean = true,
+    /**
+     * Комиссия за снятие наличных, процент от суммы. Банк берёт её сверх суммы
+     * и в смске не пишет — без этого остаток в приложении разойдётся с банком.
+     */
+    val cashFee: Double = 0.0,
 )
 
 /** Сообщение, как его отдала платформа. */
@@ -48,6 +53,8 @@ data class ParsedSms(
     val title: String,
     /** Последние цифры карты, если банк их указал. */
     val mask: String,
+    /** Снятие наличных: деньги не потрачены, а переложены с карты в кошелёк. */
+    val cash: Boolean = false,
 )
 
 /** Слова по умолчанию — русскоязычные банки пишут примерно одинаково. */
@@ -56,6 +63,10 @@ object SmsWords {
     const val INCOME = "зачисление, пополнение, поступление, возврат, zachislenie, popolnenie"
     // «баланс» сюда нельзя: банки пишут остаток в каждой смске о покупке
     const val IGNORE = "код, пароль, otp, акция, скидка, кредит одобрен, бонус"
+
+    /** Снятие наличных — на любом языке правила, слова не настраиваются. */
+    const val CASH = "nagt pul almak, nagt pul alyndy, nagt pul çykaryldy, снятие наличных, выдача наличных, " +
+        "cash withdrawal, atm withdrawal, naqd pul yechish, қолма-қол ақша алу"
 }
 
 /**
@@ -137,6 +148,7 @@ object SmsParse {
             income = isIncome,
             title = merchant(text).ifBlank { src.name },
             mask = findMask(text),
+            cash = !isIncome && words(SmsWords.CASH).any { it in low },
         )
     }
 

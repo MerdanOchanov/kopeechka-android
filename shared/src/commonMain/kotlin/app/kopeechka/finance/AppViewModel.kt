@@ -203,6 +203,8 @@ data class SmsEdit(
     val ignoreWords: String = SmsWords.IGNORE,
     val auto: Boolean = false,
     val cardMask: String = "",
+    /** Комиссия за снятие наличных, % — строкой, как в поле ввода. */
+    val cashFee: String = "",
 )
 
 /** Черновик валюты, которой нет в каталоге. */
@@ -1994,24 +1996,39 @@ class AppViewModel(
         if (item.amount <= 0) return say("msg.amountNeeded")
         val a = c.acc(item.accId) ?: return say("msg.pickAccount")
         val amount = c.conv(item.amount, item.cur.ifBlank { a.cur }, a.cur)
-        if (!c.s.allowNegative && !item.income && c.balance(a) < amount) return say("msg.notEnough", a.name)
+        val fee = c.conv(item.fee, item.cur.ifBlank { a.cur }, a.cur)
+        // снятие наличных уходит переводом в кошелёк; без кошелька — обычным расходом
+        val wallet = item.toAcc.takeIf { item.cash && it.isNotBlank() && it != a.id }?.let { c.acc(it) }
+        if (!c.s.allowNegative && !item.income && c.balance(a) < amount + fee) return say("msg.notEnough", a.name)
         store.update { s ->
+            val main = if (wallet != null) {
+                Tx(
+                    id = s.nextId, date = item.date, title = item.title.ifBlank { l.t("sms.cashTitle") },
+                    cat = CAT_TRANSFER, acc = a.id, amount = -amount, note = item.note,
+                    toAcc = wallet.id, toAmount = c.conv(amount, a.cur, wallet.cur),
+                )
+            } else {
+                Tx(
+                    id = s.nextId,
+                    date = item.date,
+                    title = item.title.ifBlank { l.t("inbox.receipt") },
+                    cat = item.cat,
+                    acc = a.id,
+                    amount = if (item.income) amount else -amount,
+                    note = item.note,
+                )
+            }
+            val feeTx = if (fee > 0) {
+                Tx(id = s.nextId + 1, date = item.date, title = l.t("sms.feeTitle"), cat = SmsInbox.feeCategory(s), acc = a.id, amount = -fee)
+            } else {
+                null
+            }
             s.copy(
-                txs = listOf(
-                    Tx(
-                        id = s.nextId,
-                        date = item.date,
-                        title = item.title.ifBlank { l.t("inbox.receipt") },
-                        cat = item.cat,
-                        acc = a.id,
-                        amount = if (item.income) amount else -amount,
-                        note = item.note,
-                    ),
-                ) + s.txs,
-                nextId = s.nextId + 1,
+                txs = listOfNotNull(feeTx, main) + s.txs,
+                nextId = s.nextId + if (feeTx != null) 2 else 1,
                 inbox = s.inbox.filterNot { it.id == item.id },
                 // в следующий раз тот же магазин попадёт в ту же категорию сам
-                merchantCats = if ((item.source == INBOX_SMS || item.source == INBOX_PUSH) && item.title.isNotBlank()) {
+                merchantCats = if ((item.source == INBOX_SMS || item.source == INBOX_PUSH) && item.title.isNotBlank() && wallet == null) {
                     s.merchantCats + (item.title.lowercase() to item.cat)
                 } else {
                     s.merchantCats
@@ -2074,7 +2091,10 @@ class AppViewModel(
         smsEdit = if (src == null) {
             SmsEdit(accId = store.current.accounts.firstOrNull()?.id.orEmpty())
         } else {
-            SmsEdit(src.id, src.name, src.sender, src.accId, src.expenseWords, src.incomeWords, src.ignoreWords, src.auto, src.cardMask)
+            SmsEdit(
+                src.id, src.name, src.sender, src.accId, src.expenseWords, src.incomeWords, src.ignoreWords, src.auto, src.cardMask,
+                cashFee = if (src.cashFee > 0) numText(src.cashFee) else "",
+            )
         }
         smsTest = ""
     }
@@ -2102,6 +2122,7 @@ class AppViewModel(
                 ignoreWords = e.ignoreWords.trim(),
                 auto = e.auto,
                 cardMask = e.cardMask.filter { it.isDigit() }.takeLast(4),
+                cashFee = num(e.cashFee).coerceIn(0.0, 100.0),
             )
             s.copy(
                 smsSources = if (e.id == null) s.smsSources + src else s.smsSources.map { if (it.id == e.id) src else it },
@@ -2133,8 +2154,15 @@ class AppViewModel(
         val src = SmsSource("test", e.name, e.sender, e.accId, cardMask = e.cardMask, expenseWords = e.expenseWords, incomeWords = e.incomeWords, ignoreWords = e.ignoreWords)
         if (src.cardMask.isNotBlank() && !SmsParse.hasCard(smsTest, src.cardMask)) return l.t("sms.testOtherCard", src.cardMask)
         val p = SmsParse.parse(smsTest, src, c.accCur(e.accId)) ?: return l.t("sms.testNothing")
-        val kind = l.t(if (p.income) "kind.income" else "kind.expense")
         val mask = if (p.mask.isEmpty()) "" else " · ${l.t("sms.testMask", p.mask)}"
+        if (p.cash) {
+            val card = c.acc(e.accId)
+            val wallet = card?.let { SmsInbox.walletFor(c.d, it) }
+            val fee = num(e.cashFee) * p.amount / 100
+            val where = if (wallet != null) l.t("sms.testCash", wallet.name, c.fmt(fee, p.cur)) else l.t("sms.testCashNoWallet")
+            return l.t("sms.cashTitle") + " · " + c.fmt(p.amount, p.cur) + " · " + where + mask
+        }
+        val kind = l.t(if (p.income) "kind.income" else "kind.expense")
         return l.t("sms.testResult", kind, c.fmt(p.amount, p.cur), p.title) + mask
     }
 
