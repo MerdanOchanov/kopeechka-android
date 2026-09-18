@@ -57,6 +57,7 @@ import app.kopeechka.finance.data.SyncSnapshot
 import app.kopeechka.finance.data.SyncSpace
 import app.kopeechka.finance.data.forSync
 import app.kopeechka.finance.data.SmsParse
+import app.kopeechka.finance.data.SmsPresets
 import app.kopeechka.finance.data.SmsSource
 import app.kopeechka.finance.data.SmsWords
 import app.kopeechka.finance.data.Tx
@@ -168,6 +169,7 @@ data class SmsEdit(
     val incomeWords: String = SmsWords.INCOME,
     val ignoreWords: String = SmsWords.IGNORE,
     val auto: Boolean = false,
+    val cardMask: String = "",
 )
 
 /** Черновик валюты, которой нет в каталоге. */
@@ -1912,9 +1914,14 @@ class AppViewModel(
         smsEdit = if (src == null) {
             SmsEdit(accId = store.current.accounts.firstOrNull()?.id.orEmpty())
         } else {
-            SmsEdit(src.id, src.name, src.sender, src.accId, src.expenseWords, src.incomeWords, src.ignoreWords, src.auto)
+            SmsEdit(src.id, src.name, src.sender, src.accId, src.expenseWords, src.incomeWords, src.ignoreWords, src.auto, src.cardMask)
         }
         smsTest = ""
+    }
+
+    /** Заполнить новое правило шаблоном банка: название и слова, отправителя человек впишет сам. */
+    fun applySmsPreset(p: SmsPresets.Preset) {
+        smsEdit = smsEdit?.copy(name = p.name, expenseWords = p.expense, incomeWords = p.income, ignoreWords = p.ignore)
     }
 
     fun saveSmsSource() {
@@ -1934,6 +1941,7 @@ class AppViewModel(
                 incomeWords = e.incomeWords.trim(),
                 ignoreWords = e.ignoreWords.trim(),
                 auto = e.auto,
+                cardMask = e.cardMask.filter { it.isDigit() }.takeLast(4),
             )
             s.copy(
                 smsSources = if (e.id == null) s.smsSources + src else s.smsSources.map { if (it.id == e.id) src else it },
@@ -1962,7 +1970,8 @@ class AppViewModel(
         val e = smsEdit ?: return ""
         if (smsTest.isBlank()) return ""
         val c = calc
-        val src = SmsSource("test", e.name, e.sender, e.accId, e.expenseWords, e.incomeWords, e.ignoreWords)
+        val src = SmsSource("test", e.name, e.sender, e.accId, cardMask = e.cardMask, expenseWords = e.expenseWords, incomeWords = e.incomeWords, ignoreWords = e.ignoreWords)
+        if (src.cardMask.isNotBlank() && !SmsParse.hasCard(smsTest, src.cardMask)) return l.t("sms.testOtherCard", src.cardMask)
         val p = SmsParse.parse(smsTest, src, c.accCur(e.accId)) ?: return l.t("sms.testNothing")
         val kind = l.t(if (p.income) "kind.income" else "kind.expense")
         val mask = if (p.mask.isEmpty()) "" else " · ${l.t("sms.testMask", p.mask)}"

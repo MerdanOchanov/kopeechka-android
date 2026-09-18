@@ -18,6 +18,7 @@ import app.kopeechka.finance.AppViewModel
 import app.kopeechka.finance.SmsEdit
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.SmsPresets
 import app.kopeechka.finance.ui.theme.T
 
 /** Список правил: от кого приходят банковские СМС и к какому счёту относятся. */
@@ -50,6 +51,7 @@ fun SmsPage(vm: AppViewModel, c: Calc) {
                             Text(
                                 listOfNotNull(
                                     src.sender,
+                                    src.cardMask.takeIf { it.isNotBlank() }?.let { "•$it" },
                                     acc?.let { "${it.name} · ${Currencies.sym(it.cur)}" },
                                     if (src.auto) l.t("sms.autoShort") else null,
                                 ).joinToString(" · "),
@@ -81,6 +83,15 @@ fun SmsEditOverlay(vm: AppViewModel, c: Calc, e: SmsEdit) {
         { vm.smsEdit = null },
         footer = { PrimaryButton(l.t("common.save"), { vm.saveSmsSource() }) },
     ) {
+        if (e.id == null) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Kicker(l.t("sms.presets"))
+                ChipFlow {
+                    SmsPresets.TURKMENISTAN.forEach { p -> Chip(p.name, e.name == p.name, { vm.applySmsPreset(p) }) }
+                }
+                Muted(l.t("sms.presetsNote"), 11f)
+            }
+        }
         Field(l.t("sms.name"), e.name, { vm.smsEdit = e.copy(name = it) }, placeholder = l.t("sms.nameHint"))
         Field(
             l.t("sms.sender"),
@@ -98,6 +109,14 @@ fun SmsEditOverlay(vm: AppViewModel, c: Calc, e: SmsEdit) {
             }
             Muted(l.t("sms.accNote"), 11f)
         }
+        Field(
+            l.t("sms.card"),
+            e.cardMask,
+            { vm.smsEdit = e.copy(cardMask = it.filter { ch -> ch.isDigit() }.take(4)) },
+            numeric = true,
+            placeholder = "1234",
+            note = l.t("sms.cardNote"),
+        )
         Field(l.t("sms.expenseWords"), e.expenseWords, { vm.smsEdit = e.copy(expenseWords = it) }, minLines = 2)
         Field(l.t("sms.incomeWords"), e.incomeWords, { vm.smsEdit = e.copy(incomeWords = it) }, minLines = 2)
         Field(

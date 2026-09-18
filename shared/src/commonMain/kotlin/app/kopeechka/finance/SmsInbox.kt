@@ -27,14 +27,18 @@ object SmsInbox {
     fun handle(store: Storage, sender: String, text: String, at: Long, l: Lang): SmsResult? {
         val d = store.current
         if (!d.settings.sms) return null
-        val src = d.smsSources.firstOrNull { it.enabled && SmsParse.matches(it, sender) } ?: return null
+        val src = SmsParse.pick(d.smsSources, sender, text) ?: return null
         val acc = d.accounts.firstOrNull { it.id == src.accId } ?: return null
         val parsed = SmsParse.parse(text, src, acc.cur) ?: return null
 
-        // банк указал последние цифры карты — по ним счёт определяется точнее, чем по правилу
-        val target = parsed.mask.takeIf { it.isNotEmpty() }
-            ?.let { mask -> d.accounts.firstOrNull { it.mask.takeLast(4) == mask } }
-            ?: acc
+        // у правила есть цифры карты — его счёт и есть ответ; иначе подсказка из маски счёта
+        val target = if (src.cardMask.isNotBlank()) {
+            acc
+        } else {
+            parsed.mask.takeIf { it.isNotEmpty() }
+                ?.let { mask -> d.accounts.firstOrNull { it.mask.takeLast(4) == mask } }
+                ?: acc
+        }
 
         val day = dayOf(at)
         if (alreadyKnown(d, parsed, target.id, day)) return null

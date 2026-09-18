@@ -18,6 +18,13 @@ data class SmsSource(
     val sender: String,
     /** Счёт в приложении, к которому относятся эти сообщения. */
     val accId: String,
+    /**
+     * Последние 4 цифры карты. У одного банка бывает несколько карт, и все
+     * сообщения приходят от одного отправителя — по цифрам понятно, какая это
+     * карта и в какой счёт писать. Пусто — правило берёт любые сообщения
+     * отправителя, для которых не нашлось правила с цифрами.
+     */
+    val cardMask: String = "",
     val expenseWords: String = "",
     val incomeWords: String = "",
     /** Слова, по которым сообщение вообще не про деньги: код, пароль, реклама. */
@@ -47,7 +54,8 @@ data class ParsedSms(
 object SmsWords {
     const val EXPENSE = "списание, оплата, покупка, снятие, перевод, oplata, pokupka"
     const val INCOME = "зачисление, пополнение, поступление, возврат, zachislenie, popolnenie"
-    const val IGNORE = "код, пароль, otp, баланс, акция, скидка, кредит одобрен, бонус"
+    // «баланс» сюда нельзя: банки пишут остаток в каждой смске о покупке
+    const val IGNORE = "код, пароль, otp, акция, скидка, кредит одобрен, бонус"
 }
 
 /**
@@ -61,6 +69,31 @@ object SmsParse {
     fun words(s: String): List<String> =
         s.split(',', ';').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
 
+    /**
+     * Какое правило разбирает сообщение. Сначала ищем правило, чьи цифры карты
+     * есть в тексте; не нашлось — правило этого отправителя без цифр. Если все
+     * правила отправителя с цифрами и ни одни не подошли — это чужая карта.
+     */
+    fun pick(sources: List<SmsSource>, sender: String, text: String): SmsSource? {
+        val own = sources.filter { it.enabled && matches(it, sender) }
+        return own.firstOrNull { it.cardMask.isNotBlank() && hasCard(text, it.cardMask) }
+            ?: own.firstOrNull { it.cardMask.isBlank() }
+    }
+
+    /** Четыре цифры стоят в тексте отдельно: не часть суммы или другого номера. */
+    fun hasCard(text: String, mask: String): Boolean {
+        val m = mask.filter { it.isDigit() }.takeLast(4)
+        if (m.length < 4) return false
+        var i = text.indexOf(m)
+        while (i >= 0) {
+            val before = if (i > 0) text[i - 1] else ' '
+            val after = if (i + m.length < text.length) text[i + m.length] else ' '
+            if (!before.isDigit() && !after.isDigit()) return true
+            i = text.indexOf(m, i + 1)
+        }
+        return false
+    }
+
     /** Подходит ли отправитель правилу: сравниваем без учёта регистра и пробелов. */
     fun matches(src: SmsSource, sender: String): Boolean {
         val a = src.sender.trim().lowercase().replace(" ", "")
@@ -70,7 +103,9 @@ object SmsParse {
 
     fun parse(text: String, src: SmsSource, defaultCur: String): ParsedSms? {
         val low = text.lowercase()
-        val ignore = words(src.ignoreWords).ifEmpty { words(SmsWords.IGNORE) }
+        // слова об остатке не отбрасывают сообщение, даже если стоят в старых правилах:
+        // остаток есть почти в каждой смске о покупке
+        val ignore = words(src.ignoreWords).ifEmpty { words(SmsWords.IGNORE) }.filterNot { it in BALANCE_WORDS }
         if (ignore.any { it in low }) return null
 
         val expense = words(src.expenseWords).ifEmpty { words(SmsWords.EXPENSE) }
@@ -122,12 +157,14 @@ object SmsParse {
         return CURRENCY_WORDS[t] ?: t.uppercase().take(3)
     }
 
+    private val BALANCE_WORDS = setOf("баланс", "остаток", "galyndy", "balance", "balans")
+
     private val SPACES = Regex("[\\s ]")
 
     /** Число с необязательными дробными и следом — валюта словом, кодом или знаком. */
     private val AMOUNT = Regex(
         "(\\d{1,3}(?:[\\s ]\\d{3})*(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)\\s*" +
-            "(RUB|RUR|USD|EUR|TMT|KZT|UZS|TRY|AZN|GBP|CNY|р(?:уб)?\\.?|манат|тмт|сум|тенге|₽|\\$|€|₼|₺)",
+            "(RUB|RUR|USD|EUR|TMT|KZT|UZS|TRY|AZN|GBP|CNY|р(?:уб)?\\.?|манат|manat|тмт|сум|so'm|som|тенге|теңге|₽|\\$|€|₼|₺|₸)",
         RegexOption.IGNORE_CASE,
     )
 
@@ -143,8 +180,37 @@ object SmsParse {
 
     private val CURRENCY_WORDS = mapOf(
         "р" to "RUB", "руб" to "RUB", "руб." to "RUB", "₽" to "RUB", "rur" to "RUB",
-        "манат" to "TMT", "тмт" to "TMT", "₼" to "TMT",
+        "манат" to "TMT", "manat" to "TMT", "тмт" to "TMT", "₼" to "TMT",
+        "so'm" to "UZS", "som" to "UZS", "теңге" to "KZT", "₸" to "KZT",
         "сум" to "UZS", "тенге" to "KZT",
         "$" to "USD", "€" to "EUR", "₺" to "TRY",
+    )
+}
+
+/**
+ * Готовые правила для банков Туркменистана. Слова собраны по-туркменски
+ * и по-русски — банки пишут на обоих языках. Имя отправителя в каждом банке
+ * своё и со временем меняется, поэтому его человек вписывает сам: точно так,
+ * как оно видно в списке сообщений.
+ */
+object SmsPresets {
+    data class Preset(val name: String, val expense: String, val income: String, val ignore: String)
+
+    private const val TM_EXPENSE =
+        "tölendi, töleg, satyn alyş, alyş, çykaryldy, nagt pul, geçirildi kartdan, " +
+            "списание, оплата, покупка, снятие, перевод с карты"
+    private const val TM_INCOME =
+        "gelip gowuşdy, geçirildi hasabyňyza, hasabyňyza, girdeji, zachislenie, " +
+            "зачисление, поступление, пополнение, перевод на карту"
+    private const val TM_IGNORE =
+        "kod, parol, açar söz, aksiýa, arzanladyş, код, пароль, акция, скидка"
+
+    val TURKMENISTAN = listOf(
+        Preset("Halkbank", TM_EXPENSE, TM_INCOME, TM_IGNORE),
+        Preset("Senagat", TM_EXPENSE, TM_INCOME, TM_IGNORE),
+        Preset("Rysgal", TM_EXPENSE, TM_INCOME, TM_IGNORE),
+        Preset("Türkmenistan", TM_EXPENSE, TM_INCOME, TM_IGNORE),
+        Preset("Daýhanbank", TM_EXPENSE, TM_INCOME, TM_IGNORE),
+        Preset("TDDB", TM_EXPENSE, TM_INCOME, TM_IGNORE),
     )
 }

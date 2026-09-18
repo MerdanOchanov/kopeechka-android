@@ -31,7 +31,7 @@ import kotlin.coroutines.resume
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 class IosFiles {
 
-    private var keepAlive: PickerDelegate? = null
+    private var keepAlive: DocumentPickerDelegate? = null
 
     /** Сохранить через «Файлы». Возвращает имя или null, если человек передумал. */
     suspend fun save(name: String, text: String): String? {
@@ -64,7 +64,7 @@ class IosFiles {
                 return@suspendCancellableCoroutine
             }
             val picker = make()
-            val delegate = PickerDelegate { url ->
+            val delegate = DocumentPickerDelegate { url ->
                 keepAlive = null
                 cont.resume(url)
             }
@@ -84,7 +84,7 @@ class IosFiles {
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private class PickerDelegate(
+private class DocumentPickerDelegate(
     private val onDone: (NSURL?) -> Unit,
 ) : NSObject(), UIDocumentPickerDelegateProtocol {
 
