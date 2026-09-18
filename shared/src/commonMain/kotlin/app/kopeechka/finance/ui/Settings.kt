@@ -117,32 +117,25 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
     val l = T.l
     val s = c.s
     val provider = Ai.provider(s.aiProvider)
+    // Порядок — от того, чем пользуются каждый день, к тому, что трогают раз в год.
+    // Опасное (демо, очистка) — в самом низу.
     ScreenColumn(gap = 22.dp) {
+        // ——— мои деньги ———
         Column {
-            SectionTitle(l.t("set.sections"))
+            SectionTitle(l.t("set.grpMoney"))
             Spacer(Modifier.height(4.dp))
             NavRow(Icons.Wallet, l.t("set.accounts"), "${l.n(c.d.accounts.size, "account")} · ${c.fmtMain(c.totalMain)}") { vm.openPage(Page.ACCOUNTS) }
             NavRow(Icons.Tags, l.t("set.categories"), l.t("set.categoriesSub", l.n(c.d.categories.size, "category"))) { vm.openPage(Page.CATEGORIES) }
-            NavRow(
-                Icons.Target,
-                l.t("set.goals"),
-                if (c.d.goals.isEmpty()) l.t("set.goalsEmpty") else l.n(c.d.goals.size, "goal"),
-            ) { vm.openPage(Page.GOALS) }
-            NavRow(Icons.Rate, l.t("set.currencies"), l.t("set.currenciesSub", l.n(c.currencies.size, "currency"), c.main)) { vm.openPage(Page.CURRENCIES) }
-            NavRow(
-                Icons.Cloud,
-                l.t("set.backup"),
-                when {
-                    !s.driveLinked -> l.t("backup.driveNotLinked")
-                    s.lastBackupAt > 0 -> l.t("backup.drive") + " · " + formatBackupTime(s.lastBackupAt, l)
-                    else -> l.t("backup.driveLinked")
-                },
-            ) { vm.openPage(Page.BACKUP) }
             NavRow(
                 Icons.Bell,
                 l.t("rec.title"),
                 if (c.d.recurring.isEmpty()) l.t("rec.navEmpty") else l.n(c.d.recurring.size, "payment"),
             ) { vm.openPage(Page.RECURRING) }
+            NavRow(
+                Icons.Target,
+                l.t("set.goals"),
+                if (c.d.goals.isEmpty()) l.t("set.goalsEmpty") else l.n(c.d.goals.size, "goal"),
+            ) { vm.openPage(Page.GOALS) }
             NavRow(
                 Icons.Clock,
                 l.t("debt.title"),
@@ -156,6 +149,25 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                     l.t("biz.navSub", l.n(c.d.orders.size, "order"), l.n(c.d.customers.size, "customer")),
                 ) { vm.openPage(Page.BUSINESS) }
             }
+        }
+
+        // ——— ввод без рук: банк и ИИ ———
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.grpAuto"))
+            Muted(l.t("set.grpAutoNote"), 11.5f, color = col.n700)
+            if (vm.canReadPush) {
+                SettingRow(l.t("push.enable"), if (s.bankPush && !vm.pushAccess()) l.t("push.noAccess") else l.t("push.enableSub")) {
+                    Toggle(s.bankPush) { vm.setPushModule(it) }
+                }
+            }
+            if (vm.canReadSms) {
+                SettingRow(l.t("sms.enable"), l.t("sms.enableSub")) {
+                    Toggle(s.sms) { vm.setSmsModule(it) }
+                }
+            }
+            if (s.sms || s.bankPush) {
+                SecondaryButton(l.t("sms.openPage"), { vm.openPage(Page.SMS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            }
             NavRow(
                 Icons.Spark,
                 l.t("set.advisor"),
@@ -163,8 +175,79 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             ) { vm.openAdvisor() }
         }
 
+        // ——— вместе ———
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("set.lang"))
+            SectionTitle(l.t("sync.title"))
+            Muted(l.t("sync.settingsNote"), 11.5f, color = col.n700)
+            SecondaryButton(
+                if (c.d.space == null) l.t("sync.openPage") else l.t("sync.openPageOn"),
+                { vm.openPage(Page.SYNC) },
+                Modifier.fillMaxWidth(),
+                size = 13,
+                upper = true,
+            )
+        }
+
+        // ——— валюты: курсы, основная валюта, валюты счетов — в одном месте ———
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.grpCurrency"))
+            NavRow(Icons.Rate, l.t("set.currencies"), l.t("set.currenciesSub", l.n(c.currencies.size, "currency"), c.main)) { vm.openPage(Page.CURRENCIES) }
+            Kicker(l.t("set.mainCur"))
+            Muted(l.t("set.mainCurNote"), 11.5f, color = col.n700)
+            CurrencyGrid(c.currencies, c.main) { vm.setMainCur(it) }
+            GhostButton(l.t("set.addCur"), { vm.currencyPicker = true }, size = 12)
+            Kicker(l.t("set.accCur"))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                c.d.accounts.forEach { a ->
+                    val bal = c.balances[a.id] ?: 0.0
+                    SettingRow(
+                        a.name,
+                        "${c.fmt(bal, a.cur)} · " + if (a.cur == c.main) l.t("set.inMainCur") else "≈ ${c.fmtMain(c.toMain(bal, a.cur))}",
+                    ) {
+                        SecondaryButton("${a.cur} ${Currencies.sym(a.cur)}", { vm.curSheet = CurSheet.Acc(a.id) })
+                    }
+                }
+            }
+        }
+
+        // ——— копии и перенос ———
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.grpBackup"))
+            NavRow(
+                Icons.Cloud,
+                l.t("set.backup"),
+                when {
+                    !s.driveLinked -> l.t("backup.driveNotLinked")
+                    s.lastBackupAt > 0 -> l.t("backup.drive") + " · " + formatBackupTime(s.lastBackupAt, l)
+                    else -> l.t("backup.driveLinked")
+                },
+            ) { vm.openPage(Page.BACKUP) }
+            Kicker(l.t("csv.section"))
+            SecondaryButton(l.t("stmt.open"), { vm.openStatement() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            Muted(l.t("stmt.openNote"), 11f)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryButton(l.t("csv.export"), { vm.askExportCsv() }, Modifier.weight(1f), size = 12, upper = true)
+                SecondaryButton(l.t("csv.import"), { vm.askImportCsv() }, Modifier.weight(1f), size = 12, upper = true)
+            }
+            GhostButton(l.t("csv.template"), { vm.saveTemplate() }, size = 12)
+            Muted(l.t("csv.note"), 10.5f, color = col.n700)
+        }
+
+        // ——— возможности: модули и правила учёта ———
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.grpFeatures"))
+            SettingRow(l.t("biz.enable"), l.t("biz.enableSub")) {
+                Toggle(s.business) { vm.setBusiness(it) }
+            }
+            SettingRow(l.t("set.allowNegative"), l.t("set.allowNegativeSub")) {
+                Toggle(s.allowNegative) { v -> vm.settings { it.copy(allowNegative = v) } }
+            }
+        }
+
+        // ——— вид и язык ———
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle(l.t("set.grpLook"))
+            Kicker(l.t("set.lang"))
             Muted(l.t("set.langNote"), 11.5f, color = col.n700)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Lang.CODES.forEach { code ->
@@ -187,86 +270,14 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                     }
                 }
             }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("set.mainCur"))
-            Muted(l.t("set.mainCurNote"), 11.5f, color = col.n700)
-            CurrencyGrid(c.currencies, c.main) { vm.setMainCur(it) }
-            GhostButton(l.t("set.addCur"), { vm.currencyPicker = true }, size = 12)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            SectionTitle(l.t("set.accCur"))
-            c.d.accounts.forEach { a ->
-                val bal = c.balances[a.id] ?: 0.0
-                SettingRow(
-                    a.name,
-                    "${c.fmt(bal, a.cur)} · " + if (a.cur == c.main) l.t("set.inMainCur") else "≈ ${c.fmtMain(c.toMain(bal, a.cur))}",
-                ) {
-                    SecondaryButton("${a.cur} ${Currencies.sym(a.cur)}", { vm.curSheet = CurSheet.Acc(a.id) })
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("biz.title"))
-            Muted(l.t("biz.settingsNote"), 11.5f, color = col.n700)
-            SettingRow(l.t("biz.enable"), l.t("biz.enableSub")) {
-                Toggle(s.business) { vm.setBusiness(it) }
-            }
-            if (s.business) {
-                SecondaryButton(l.t("biz.openPage"), { vm.openPage(Page.BUSINESS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("sync.title"))
-            Muted(l.t("sync.settingsNote"), 11.5f, color = col.n700)
-            SecondaryButton(
-                if (c.d.space == null) l.t("sync.openPage") else l.t("sync.openPageOn"),
-                { vm.openPage(Page.SYNC) },
-                Modifier.fillMaxWidth(),
-                size = 13,
-                upper = true,
-            )
-        }
-
-        if (vm.canReadSms || vm.canReadPush) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle(l.t("bank.title"))
-                Muted(l.t("sms.settingsNote"), 11.5f, color = col.n700)
-                if (vm.canReadPush) {
-                    SettingRow(l.t("push.enable"), if (s.bankPush && !vm.pushAccess()) l.t("push.noAccess") else l.t("push.enableSub")) {
-                        Toggle(s.bankPush) { vm.setPushModule(it) }
-                    }
-                }
-                if (vm.canReadSms) {
-                    SettingRow(l.t("sms.enable"), l.t("sms.enableSub")) {
-                        Toggle(s.sms) { vm.setSmsModule(it) }
-                    }
-                }
-                if (s.sms || s.bankPush) {
-                    SecondaryButton(l.t("sms.openPage"), { vm.openPage(Page.SMS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("set.money"))
-            SettingRow(l.t("set.allowNegative"), l.t("set.allowNegativeSub")) {
-                Toggle(s.allowNegative) { v -> vm.settings { it.copy(allowNegative = v) } }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("set.look"))
+            Kicker(l.t("set.look"))
             Segments(listOf(l.t("set.light"), l.t("set.dark")), if (s.dark) 1 else 0, { vm.setDark(it == 1) })
             SettingRow(l.t("set.kopecks"), l.t("set.kopecksSub")) {
                 Toggle(s.showKopecks) { v -> vm.settings { it.copy(showKopecks = v) } }
             }
         }
 
+        // ——— напоминания ———
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle(l.t("set.reminders"))
             SettingRow(l.t("set.remind"), l.t("set.remindSub", s.remindHour)) {
@@ -279,26 +290,22 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             }
         }
 
+        // ——— профиль ———
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle(l.t("set.profile"))
             var name by remember { mutableStateOf(s.userName) }
             Field(l.t("set.name"), name, { name = it; vm.settings { st -> st.copy(userName = it) } }, placeholder = l.t("set.nameHint"))
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle(l.t("csv.section"))
-            SecondaryButton(l.t("csv.export"), { vm.askExportCsv() }, Modifier.fillMaxWidth(), size = 13, upper = true)
-            SecondaryButton(l.t("csv.import"), { vm.askImportCsv() }, Modifier.fillMaxWidth(), size = 13, upper = true)
-            GhostButton(l.t("csv.template"), { vm.saveTemplate() }, size = 12)
-            Muted(l.t("csv.note"), 10.5f, color = col.n700)
-            SecondaryButton(l.t("stmt.open"), { vm.openStatement() }, Modifier.fillMaxWidth(), size = 13, upper = true)
-            Muted(l.t("stmt.openNote"), 11f)
-        }
-
+        // ——— данные: опасное — внизу ———
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle(l.t("set.data"))
             SecondaryButton(l.t("set.loadDemo"), { vm.askLoadDemo() }, Modifier.fillMaxWidth(), size = 13, upper = true)
             DangerButton(l.t("set.clearAll"), { vm.askClearAll() })
+        }
+
+        // ——— о приложении ———
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Muted(l.t("set.about", vm.version), 10.5f)
             if (vm.canCheckUpdates) {
                 GhostButton(if (vm.checkingUpdates) l.t("common.wait") else l.t("upd.check"), { vm.checkUpdates(manual = true) }, size = 12)

@@ -122,6 +122,13 @@ internal val EN_STRINGS: Map<String, String> = mapOf(
     "report.fact.count" to "Entries in the period",
 
     // ——— settings ———
+    "set.grpMoney" to "My money",
+    "set.grpAuto" to "Hands-free input",
+    "set.grpAutoNote" to "Operations from bank notifications and SMS, receipts from photos. Everything arrives as a draft in To review.",
+    "set.grpCurrency" to "Currencies",
+    "set.grpBackup" to "Backups and transfer",
+    "set.grpFeatures" to "Features",
+    "set.grpLook" to "Look and language",
     "set.sections" to "Sections",
     "set.accounts" to "Accounts and cards",
     "set.categories" to "Categories and limits",
@@ -155,7 +162,7 @@ internal val EN_STRINGS: Map<String, String> = mapOf(
     "set.data" to "Data",
     "set.loadDemo" to "Load sample data",
     "set.clearAll" to "Erase all data",
-    "set.about" to "Kopeechka {0} · data is kept on this phone only. The only things that leave it are backups (to your own Google Drive) and questions to the AI advisor — when you send them yourself.",
+    "set.about" to "Kopeechka {0} · data stays on this phone; the app has no server. Only what you turn on goes online: backups, the shared budget, receipts and AI questions, exchange rates and update checks.",
 
     // ——— accounts ———
     "acc.title" to "Accounts and cards",

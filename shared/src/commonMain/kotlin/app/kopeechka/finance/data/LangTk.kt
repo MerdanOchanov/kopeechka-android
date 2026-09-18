@@ -126,6 +126,13 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "report.fact.count" to "Döwürdäki amallar",
 
     // ——— sazlamalar ———
+    "set.grpMoney" to "Meniň pulum",
+    "set.grpAuto" to "Elsiz girizmek",
+    "set.grpAutoNote" to "Bank bildirişlerinden we SMS-lerden amallar, surat boýunça çekler. Ählisi «Barlaga» çernowik bolup gelýär.",
+    "set.grpCurrency" to "Walýutalar",
+    "set.grpBackup" to "Nusgalar we geçirmek",
+    "set.grpFeatures" to "Mümkinçilikler",
+    "set.grpLook" to "Görnüş we dil",
     "set.sections" to "Bölümler",
     "set.accounts" to "Hasaplar we kartlar",
     "set.categories" to "Kategoriýalar we çäkler",
@@ -159,7 +166,7 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "set.data" to "Maglumatlar",
     "set.loadDemo" to "Demo maglumatlary ýükle",
     "set.clearAll" to "Ähli maglumatlary poz",
-    "set.about" to "Kopeechka {0} · maglumatlar diňe şu telefonda saklanýar. Internete diňe ätiýaçlyk nusgalar (öz Google Diskiňize) we emeli aňa soraglaryňyz — özüňiz iberen wagtyňyz — gidýär.",
+    "set.about" to "Kopeýeçka {0} · maglumatlar diňe şu telefonda saklanýar, programmanyň serweri ýok. Internete diňe özüňiz açan zatlaryňyz gidýär: nusga, umumy býujet, çekler we AI soraglary, hümmetler we täzelenme barlagy.",
 
     // ——— hasaplar ———
     "acc.title" to "Hasaplar we kartlar",
