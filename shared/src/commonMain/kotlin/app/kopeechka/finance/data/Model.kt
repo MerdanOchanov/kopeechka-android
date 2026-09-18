@@ -128,6 +128,8 @@ data class Settings(
     val aiProvider: String = "claude",
     val aiModels: Map<String, String> = emptyMap(),
     val customEndpoint: String = "",
+    /** Каталог Yandex Cloud для YandexGPT: без него модель не найти. */
+    val yandexFolder: String = "",
     val aiSets: Set<String> = setOf("ops", "budgets", "accounts"),
     /** Модуль «Дело»: прайс, клиенты, заказы. Выключен — приложение выглядит как прежде. */
     val business: Boolean = false,

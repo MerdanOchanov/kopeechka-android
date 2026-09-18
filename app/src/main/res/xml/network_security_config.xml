@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Как и раньше: http разрешён ради «своего endpoint» ИИ в локальной сети. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <!--
+        GigaChat подписан корневым сертификатом Минцифры России, которого нет
+        в системном хранилище. Человек ставит его сам (gu-st.ru), а приложение
+        доверяет установленным вручную сертификатам только для доменов Сбера.
+    -->
+    <domain-config>
+        <domain includeSubdomains="true">devices.sberbank.ru</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

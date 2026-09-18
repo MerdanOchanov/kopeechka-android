@@ -307,6 +307,11 @@ fun AdvisorOverlay(vm: AppViewModel, data: AppData) {
         if (p.key == "custom") {
             Field(l.t("ai.endpoint"), s.customEndpoint, vm::setEndpoint, placeholder = "http://192.168.1.10:11434/v1")
         }
+        if (p.key == "yandex") {
+            Field(l.t("ai.folder"), s.yandexFolder, vm::setFolder, placeholder = "b1g…", note = l.t("ai.folderNote"))
+        }
+        if (p.key == "gigachat") Muted(l.t("ai.gigachatNote"), 11f)
+        if (p.key == "yandex") Muted(l.t("ai.noVision", p.name(l)), 11f)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Kicker(l.t("ai.send"))

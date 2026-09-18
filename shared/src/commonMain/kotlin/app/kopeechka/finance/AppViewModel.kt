@@ -1763,6 +1763,7 @@ class AppViewModel(
 
     fun setModel(v: String) = settings { it.copy(aiModels = it.aiModels + (it.aiProvider to v.trim())) }
     fun setEndpoint(v: String) = settings { it.copy(customEndpoint = v.trim()) }
+    fun setFolder(v: String) = settings { it.copy(yandexFolder = v.trim()) }
     fun toggleSet(k: String) = settings { it.copy(aiSets = if (k in it.aiSets) it.aiSets - k else it.aiSets + k) }
 
     fun modelFor(s: Settings) = s.aiModels[s.aiProvider]?.takeIf { it.isNotBlank() } ?: Ai.provider(s.aiProvider).defaultModel
@@ -1858,7 +1859,7 @@ class AppViewModel(
                     answer = localAdvice()
                     answerFrom = lang.t("ai.offline")
                 } else {
-                    answer = stripMd(Ai.ask(p.key, model, key, s.customEndpoint, prompt))
+                    answer = stripMd(Ai.ask(p.key, model, key, s.customEndpoint, prompt, folder = s.yandexFolder))
                     answerFrom = "${p.name(lang)} · $model"
                 }
             } catch (e: AiError) {
@@ -1881,7 +1882,7 @@ class AppViewModel(
      */
     fun canScan(): Boolean {
         val p = Ai.provider(store.current.settings.aiProvider)
-        return platform.canPickImage && (!p.needsKey || hasKey(p.key))
+        return platform.canPickImage && p.images && (!p.needsKey || hasKey(p.key))
     }
 
     /** QR работает без ключа ИИ и без интернета — нужна только камера. */
@@ -1931,6 +1932,7 @@ class AppViewModel(
         val p = Ai.provider(s.aiProvider)
         val key = secure.get(keyName(p.key))
         if (p.needsKey && key.isBlank()) return say("msg.receiptNoKey", p.name(l))
+        if (!p.images) return say("msg.receiptNoVision", p.name(l))
         viewModelScope.launch {
             val img = runCatching { platform.pickImage(source) }.getOrNull() ?: return@launch
             scanning = true
@@ -1938,7 +1940,7 @@ class AppViewModel(
                 val c = calc
                 val cats = store.current.categories.filter { !it.income }.joinToString(", ") { it.name }
                 val prompt = l.t("ai.receiptPrompt", cats, c.main, epochDate(c.todayDay).isoString())
-                val answer = Ai.ask(p.key, modelFor(s), key, s.customEndpoint, prompt, listOf(AiImage(img.base64, img.mime)))
+                val answer = Ai.ask(p.key, modelFor(s), key, s.customEndpoint, prompt, listOf(AiImage(img.base64, img.mime)), s.yandexFolder)
                 val scan = Receipt.parse(answer)
                 if (scan == null) say("msg.receiptUnreadable") else addFromReceipt(scan)
             } catch (e: AiError) {
