@@ -23,7 +23,8 @@ object Currencies {
         /** Название на текущем языке: «доллары США» / «US dollars» / «ABŞ dollary». */
         val name: String
             get() = when (lang.code) {
-                "en" -> en
+                // узбекский на латинице: английское название понятнее русского
+                "en", "uz" -> en
                 "tk" -> tk.ifBlank { en }
                 else -> ru
             }
@@ -224,8 +225,10 @@ object Currencies {
     /** «12к» для подписей столбиков */
     fun short(v: Double): String {
         val a = abs(v)
-        val suffix = if (lang.code == "en") "k" else "к"
-        val big = if (lang.code == "en") "m" else "м"
+        // латиница — латинские сокращения, кириллица — кириллические
+        val latin = lang.code in setOf("en", "tk", "uz")
+        val suffix = if (latin) "k" else "к"
+        val big = if (latin) "m" else "м"
         return when {
             a >= 1_000_000 -> (v / 1_000_000).roundToLong().toString() + big
             a >= 1000 -> (v / 1000).roundToLong().toString() + suffix

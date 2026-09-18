@@ -3,7 +3,7 @@ package app.kopeechka.finance.data
 import kotlin.math.abs
 
 /**
- * Языки приложения: русский, английский, туркменский.
+ * Языки приложения: русский, английский, туркменский, узбекский (латиница), казахский.
  *
  * Тексты лежат в карте «ключ → строка». Подстановки — `{0}`, `{1}`;
  * формы множественного числа разделены `|` и живут под ключами `pl.*`;
@@ -38,7 +38,7 @@ class Lang(val code: String, private val map: Map<String, String>, private val f
                 }
             }
             "en" -> if (n == 1) 0 else 1
-            else -> 0 // в туркменском существительное после числа не меняется
+            else -> 0 // в туркменском, узбекском и казахском существительное после числа не меняется
         }
         return forms.getOrElse(i) { forms.last() }
     }
@@ -56,21 +56,28 @@ class Lang(val code: String, private val map: Map<String, String>, private val f
         val RU = Lang("ru", RU_STRINGS)
         val EN = Lang("en", EN_STRINGS, RU)
         val TK = Lang("tk", TK_STRINGS, EN)
-        val ALL = listOf(RU, EN, TK)
+        // по-русски в Узбекистане и Казахстане понимают чаще, чем по-английски
+        val UZ = Lang("uz", UZ_STRINGS, RU)
+        val KK = Lang("kk", KK_STRINGS, RU)
+        val ALL = listOf(RU, EN, TK, UZ, KK)
 
-        /** Коды для переключателя в настройках: «как в системе» плюс три языка. */
-        val CODES = listOf("auto", "ru", "en", "tk")
+        /** Коды для переключателя в настройках: «как в системе» плюс пять языков. */
+        val CODES = listOf("auto", "ru", "en", "tk", "uz", "kk")
 
         fun of(code: String): Lang = when (code) {
             "ru" -> RU
             "en" -> EN
             "tk" -> TK
+            "uz" -> UZ
+            "kk" -> KK
             else -> fromSystem()
         }
 
         fun fromSystem(): Lang = when (systemLanguage()) {
             "en" -> EN
             "tk" -> TK
+            "uz" -> UZ
+            "kk" -> KK
             else -> RU
         }
 
@@ -79,6 +86,8 @@ class Lang(val code: String, private val map: Map<String, String>, private val f
             "ru" -> "Русский"
             "en" -> "English"
             "tk" -> "Türkmençe"
+            "uz" -> "Oʻzbekcha"
+            "kk" -> "Қазақша"
             else -> RU.t("set.lang.auto")
         }
     }

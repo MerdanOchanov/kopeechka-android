@@ -249,24 +249,27 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             SectionTitle(l.t("set.grpLook"))
             Kicker(l.t("set.lang"))
             Muted(l.t("set.langNote"), 11.5f, color = col.n700)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Lang.CODES.forEach { code ->
-                    val st = opt(s.lang == code)
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .background(st.bg)
-                            .hairline(st.border)
-                            .tap { vm.setLang(code) }
-                            .padding(vertical = 10.dp, horizontal = 4.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (code == "auto") l.t("set.lang.auto") else Lang.title(code),
-                            style = T.b(11.5.sp, st.fg),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+            // шесть вариантов в одну строку не помещаются — по три в ряд
+            Lang.CODES.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    row.forEach { code ->
+                        val st = opt(s.lang == code)
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .background(st.bg)
+                                .hairline(st.border)
+                                .tap { vm.setLang(code) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (code == "auto") l.t("set.lang.auto") else Lang.title(code),
+                                style = T.b(11.5.sp, st.fg),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
