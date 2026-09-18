@@ -37,7 +37,23 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     override val version: String = BuildConfig.VERSION_NAME
 
-    override val updatesFromGitHub = BuildConfig.UPDATES_FROM_GITHUB
+    /**
+     * Одна и та же сборка лежит и в Google Play, и на GitHub. Об обновлениях с GitHub
+     * говорим только тем, кто поставил её не из Play: приложению из Play правила
+     * запрещают обновляться в обход магазина.
+     */
+    override val updatesFromGitHub: Boolean by lazy {
+        BuildConfig.UPDATES_FROM_GITHUB && installer() != PLAY_STORE
+    }
+
+    private fun installer(): String? = runCatching {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            ctx.packageManager.getInstallSourceInfo(ctx.packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION")
+            ctx.packageManager.getInstallerPackageName(ctx.packageName)
+        }
+    }.getOrNull()
 
     override fun openUrl(url: String) {
         runCatching {
@@ -355,3 +371,6 @@ class AndroidPlatform(private val ctx: Context) : Platform {
         const val MAX_SMS = 500
     }
 }
+
+/** Пакет Google Play — так Android называет установщика из магазина. */
+private const val PLAY_STORE = "com.android.vending"

@@ -27,8 +27,14 @@ sdkmanager --install "platform-tools" "platforms;android-37"
 
 | Вариант | Пакет | Для чего |
 | --- | --- | --- |
-| `full` | `app.kopeechka.finance` | APK на GitHub и свой телефон: все функции, чтение СМС, проверка обновлений с GitHub |
-| `play` | `com.arassanusga.kopeechka` | Google Play: без чтения СМС и без проверки обновлений (почему — в [PLAY.md](PLAY.md)) |
+| `play` | `com.arassanusga.kopeechka` | **то, что получают люди** — и в Google Play, и на GitHub. Чтение СМС ждёт одобрения декларации (см. [PLAY.md](PLAY.md)), до тех пор СМС вставляют вручную |
+| `full` | `app.kopeechka.finance` | разработка на своём телефоне: все функции сразу, включая чтение СМС |
+
+На GitHub выкладывается не своя сборка, а **подписанный Google универсальный APK**
+из Play Console (Проводник App Bundle → версия → «Скачать» → «Подписанный
+универсальный APK»). Поэтому пакет, подпись, название и версия у GitHub и Play
+совпадают, и одно ставится поверх другого. Проверку обновлений на GitHub
+приложение включает само, только если его поставили не из Play.
 
 ```bash
 gradlew.bat :app:assembleFullDebug        # app/build/outputs/apk/full/debug/app-full-debug.apk

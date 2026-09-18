@@ -56,9 +56,11 @@
 - **Камера и фото** — приложение не запрашивает доступ к камере напрямую: снимок
   делает системная камера, фото выбирается системным окном, и приложению передаётся
   только выбранный снимок.
-- **СМС** — только в версии, распространяемой через GitHub. Сообщения банков
-  разбираются на телефоне и никуда не отправляются. В версии из Google Play
-  этой функции и разрешения нет.
+- **СМС** — сейчас приложение не запрашивает доступ к сообщениям: текст СМС банка
+  вы сами копируете и вставляете в приложение, он разбирается на телефоне и никуда
+  не отправляется. Когда появится автоматическое чтение, оно будет выключено по
+  умолчанию, включается вами в настройках после объяснения и системного запроса
+  разрешения, а читаются только сообщения отправителей из ваших правил.
 - **Доступ к уведомлениям** (Android) — только если вы сами включите его в настройках
   телефона. Приложение смотрит уведомления банковских приложений, чтобы предложить
   операцию; текст уведомлений разбирается на телефоне, никуда не отправляется
@@ -107,8 +109,10 @@ Data leaves the phone only when you turn on a feature that needs it:
 - **CSV export** is saved where you choose.
 
 The app does not request camera access directly: photos come from the system camera or
-picker; receipt QR codes are read on the phone. SMS reading exists only in the GitHub build
-and never leaves the phone; the Google Play build has neither the feature nor the permission.
+picker; receipt QR codes are read on the phone. The app currently does not request SMS access:
+you paste a bank message yourself and it is parsed on the phone. Automatic SMS reading,
+when added, will be off by default, enabled by you after an explanation and the system
+permission prompt, and limited to senders from your own rules; messages never leave the phone.
 Bank notification reading (Android) works only after you grant notification access in the
 system settings; notifications are parsed on the phone and never sent anywhere.
 

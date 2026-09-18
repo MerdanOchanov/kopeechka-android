@@ -44,9 +44,11 @@ android {
         }
     }
 
-    // full — сборка для GitHub со всеми функциями.
-    // play — для Google Play: без чтения СМС. Разрешения на SMS Play пропускает
-    // только после одобрения отдельной декларации, а без неё выпуск не пройдёт проверку.
+    // play — та самая сборка, которую получают все: из Google Play и с GitHub
+    // (на GitHub выкладывается подписанный Google универсальный APK из Play Console),
+    // поэтому пакет, подпись, название и версия везде одни.
+    // full — только для разработки на своём телефоне: все функции сразу,
+    // включая чтение СМС, которое в play ждёт одобрения декларации.
     flavorDimensions += "store"
     productFlavors {
         create("full") {
@@ -62,7 +64,8 @@ android {
             // (исключение «SMS-based money management»): тогда true и удалить
             // app/src/play/AndroidManifest.xml. До тех пор СМС вставляют вручную.
             buildConfigField("boolean", "SMS_ENABLED", "false")
-            buildConfigField("boolean", "UPDATES_FROM_GITHUB", "false")
+            // проверка обновлений на GitHub — только у поставивших APK не из Play (см. AndroidPlatform)
+            buildConfigField("boolean", "UPDATES_FROM_GITHUB", "true")
         }
     }
 
