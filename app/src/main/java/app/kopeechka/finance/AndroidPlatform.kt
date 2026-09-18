@@ -81,8 +81,20 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     override suspend fun openTextFile(): PickedFile? {
         val uri = ask(FilePrompt("open", "")) ?: return null
-        val text = ctx.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        return PickedFile(nameOf(uri), text)
+        val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+        return PickedFile(nameOf(uri), decodeText(bytes))
+    }
+
+    /**
+     * UTF-8, а если файл не в ней — windows-1251. Российские банки до сих пор
+     * выгружают выписки в 1251, и без этого вместо описаний были бы кракозябры.
+     */
+    private fun decodeText(bytes: ByteArray): String {
+        val strict = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        return runCatching { strict.decode(java.nio.ByteBuffer.wrap(bytes)).toString() }
+            .getOrElse { String(bytes, charset("windows-1251")) }
     }
 
     override fun shareTextFile(name: String, text: String, mime: String) {

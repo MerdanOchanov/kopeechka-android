@@ -53,6 +53,9 @@ import app.kopeechka.finance.data.Recurrings
 import app.kopeechka.finance.data.rebaseRates
 import app.kopeechka.finance.data.RequestStatus
 import app.kopeechka.finance.data.Settings
+import app.kopeechka.finance.data.Statement
+import app.kopeechka.finance.data.StatementLayout
+import app.kopeechka.finance.data.StatementRow
 import app.kopeechka.finance.data.SpendRequest
 import app.kopeechka.finance.data.needsApproval
 import app.kopeechka.finance.data.Sync
@@ -161,6 +164,14 @@ data class CatEdit(
     val limit: String = "",
     val income: Boolean = false,
     val color: String = "",
+)
+
+/** Выписка банка на разборе: строки файла, где что лежит, в какой счёт писать. */
+data class StatementDraft(
+    val name: String,
+    val rows: List<List<String>>,
+    val layout: StatementLayout,
+    val accId: String,
 )
 
 /** Регулярный платёж в работе: id пустой — новый. Суммы — текстом, как в поле ввода. */
@@ -307,6 +318,9 @@ class AppViewModel(
     /** Регулярный платёж, который сейчас правят. */
     var recEdit by mutableStateOf<RecEdit?>(null)
 
+    /** Выписка банка, открытая на разбор. */
+    var statement by mutableStateOf<StatementDraft?>(null)
+
     /** Вышла версия новее установленной — показываем полоску на главной. */
     var update by mutableStateOf<UpdateInfo?>(null)
         private set
@@ -452,6 +466,7 @@ class AppViewModel(
         when {
             confirm != null -> confirm = null
             inboxEdit != null -> inboxEdit = null
+            statement != null -> statement = null
             recEdit != null && datePick == null -> recEdit = null
             requestsOpen -> requestsOpen = false
             webdavEdit != null -> webdavEdit = null
@@ -2553,6 +2568,71 @@ class AppViewModel(
             ),
         )
         say("msg.restored")
+    }
+
+    // ——— выписка банка ———
+
+    fun openStatement() {
+        viewModelScope.launch {
+            val file = runCatching { platform.openTextFile() }.getOrNull() ?: return@launch
+            val rows = Statement.split(file.text)
+            if (rows.size < 2) return@launch say("stmt.empty", file.name)
+            val d = store.current
+            statement = StatementDraft(
+                name = file.name,
+                rows = rows,
+                layout = Statement.guess(rows.first()),
+                accId = d.accounts.firstOrNull { it.cur == calc.main }?.id ?: d.accounts.firstOrNull()?.id.orEmpty(),
+            )
+        }
+    }
+
+    /** Строки, которые получатся из выписки при нынешней раскладке колонок. */
+    fun statementRows(): List<StatementRow> {
+        val s = statement ?: return emptyList()
+        if (!s.layout.ready) return emptyList()
+        return Statement.parse(s.rows, s.layout, calc.accCur(s.accId))
+    }
+
+    /** Такое уже записано: та же дата, сумма и счёт — повторный импорт не удваивает. */
+    fun statementDupes(rows: List<StatementRow>): Int {
+        val s = statement ?: return 0
+        val known = store.current.txs.filter { it.acc == s.accId }.map { it.date to (it.amount * 100).roundToLong() }.toHashSet()
+        return rows.count { (it.date to (it.amount * 100).roundToLong()) in known }
+    }
+
+    fun applyStatement() {
+        val s = statement ?: return
+        val rows = statementRows()
+        if (rows.isEmpty()) return say("stmt.nothing")
+        val d = store.current
+        val known = d.txs.filter { it.acc == s.accId }.map { it.date to (it.amount * 100).roundToLong() }.toHashSet()
+        val fresh = rows.filter { (it.date to (it.amount * 100).roundToLong()) !in known }
+        val me = d.space?.memberId.orEmpty()
+        val exp = d.categories.firstOrNull { !it.income }?.id.orEmpty()
+        val inc = d.categories.firstOrNull { it.income }?.id.orEmpty()
+        store.update { st ->
+            var next = st.nextId
+            val txs = fresh.map { r ->
+                val income = r.amount > 0
+                // категория: сначала память о магазине, потом совпадение с названием категории
+                val cat = st.merchantCats[r.text.lowercase()]
+                    ?: st.categories.firstOrNull { it.income == income && r.text.contains(it.name, ignoreCase = true) }?.id
+                    ?: if (income) inc else exp
+                Tx(
+                    id = next++,
+                    date = r.date,
+                    title = r.text.ifBlank { l.t(if (income) "kind.income" else "kind.expense") },
+                    cat = cat,
+                    acc = s.accId,
+                    amount = r.amount,
+                    by = me,
+                )
+            }
+            st.copy(txs = (txs + st.txs).sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.id }), nextId = next)
+        }
+        statement = null
+        say("stmt.done", fresh.size, rows.size - fresh.size)
     }
 
     // ——— регулярные платежи ———

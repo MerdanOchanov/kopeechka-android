@@ -291,6 +291,8 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             SecondaryButton(l.t("csv.import"), { vm.askImportCsv() }, Modifier.fillMaxWidth(), size = 13, upper = true)
             GhostButton(l.t("csv.template"), { vm.saveTemplate() }, size = 12)
             Muted(l.t("csv.note"), 10.5f, color = col.n700)
+            SecondaryButton(l.t("stmt.open"), { vm.openStatement() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+            Muted(l.t("stmt.openNote"), 11f)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

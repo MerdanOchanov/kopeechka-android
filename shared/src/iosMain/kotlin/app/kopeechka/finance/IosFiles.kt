@@ -7,6 +7,7 @@ import platform.Foundation.NSString
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.NSWindowsCP1251StringEncoding
 import platform.Foundation.create
 import platform.Foundation.stringWithContentsOfURL
 import platform.Foundation.writeToURL
@@ -44,7 +45,10 @@ class IosFiles {
     suspend fun open(): PickedFile? {
         val types = listOf(UTTypeJSON, UTTypeCommaSeparatedText, UTTypePlainText, UTTypeData)
         val url = present { UIDocumentPickerViewController(forOpeningContentTypes = types, asCopy = true) } ?: return null
-        val text = NSString.stringWithContentsOfURL(url, NSUTF8StringEncoding, null) ?: return null
+        // UTF-8, а если файл не в ней — windows-1251: так выгружают выписки многие банки
+        val text = NSString.stringWithContentsOfURL(url, NSUTF8StringEncoding, null)
+            ?: NSString.stringWithContentsOfURL(url, NSWindowsCP1251StringEncoding, null)
+            ?: return null
         return PickedFile(url.lastPathComponent ?: "file", text)
     }
 

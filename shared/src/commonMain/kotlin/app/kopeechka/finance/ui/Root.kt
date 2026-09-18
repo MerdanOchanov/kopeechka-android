@@ -106,6 +106,7 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.smsEdit?.let { SmsEditOverlay(vm, calc, it) }
                 vm.webdavEdit?.let { WebDavOverlay(vm, it) }
                 vm.recEdit?.let { RecurringOverlay(vm, calc, it) }
+                vm.statement?.let { StatementOverlay(vm, calc, it) }
                 if (vm.requestsOpen) RequestsOverlay(vm, calc)
                 if (vm.inboxOpen) InboxOverlay(vm, calc)
                 vm.inboxEdit?.let { InboxEditSheet(vm, calc, it) }
