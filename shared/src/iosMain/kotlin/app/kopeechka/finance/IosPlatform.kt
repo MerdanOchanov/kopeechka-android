@@ -71,6 +71,9 @@ class IosPlatform(private val storage: IosStorage) : Platform {
     /** Фоновая копия раз в день появится вместе с входом в Google. */
     override fun syncAutoBackup(on: Boolean) = Unit
 
+    /** На iOS фоновых задач по расписанию нет — платежи проводятся при открытии приложения. */
+    override fun syncRecurring(on: Boolean) = Unit
+
     override fun onLanguageChanged(l: Lang) {
         DriveApi.folderName = l.t("backup.folder")
     }
@@ -103,6 +106,14 @@ class IosPlatform(private val storage: IosStorage) : Platform {
     override suspend fun requestSmsAccess() = false
 
     override suspend fun readSmsHistory(days: Int): List<SmsMessage> = emptyList()
+
+    // ——— уведомления банков: iOS не даёт читать чужие уведомления ———
+
+    override val canReadPush = false
+
+    override fun pushAccessGranted() = false
+
+    override fun openPushAccessSettings() = Unit
 
     // ——— обмен напрямую по Wi-Fi ———
 

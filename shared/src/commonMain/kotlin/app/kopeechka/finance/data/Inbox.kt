@@ -12,6 +12,8 @@ import kotlinx.serialization.json.jsonPrimitive
 /** Откуда взялся черновик. */
 const val INBOX_PHOTO = "photo"
 const val INBOX_SMS = "sms"
+const val INBOX_PUSH = "push"
+const val INBOX_RECURRING = "recurring"
 
 /**
  * Черновик операции: приложение о нём догадалось само — по фотографии чека

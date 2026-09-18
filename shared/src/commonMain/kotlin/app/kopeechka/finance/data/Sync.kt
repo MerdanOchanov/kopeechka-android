@@ -102,6 +102,7 @@ object Sync {
         val customers = stampList(before.customers, after.customers, now, tombs, "cust", { it.id }) { it.copy(changedAt = now) }
         val orders = stampList(before.orders, after.orders, now, tombs, "order", { it.id.toString() }) { it.copy(changedAt = now) }
         val requests = stampList(before.requests, after.requests, now, tombs, "req", { it.id.toString() }) { it.copy(changedAt = now) }
+        val recurring = stampList(before.recurring, after.recurring, now, tombs, "rec", { it.id }) { it.copy(changedAt = now) }
 
         // новая операция без автора — значит, её записали на этом телефоне;
         // пришедшие при обмене сюда не попадают, они пишутся мимо stamp
@@ -122,6 +123,7 @@ object Sync {
             customers = customers,
             orders = orders,
             requests = requests,
+            recurring = recurring,
             settings = settings,
             deleted = prune(tombs, now),
         )
@@ -146,6 +148,7 @@ object Sync {
             customers = mergeList(mine.customers, theirs.customers, deleted, "cust", { it.id }, { it.changedAt }),
             orders = mergeList(mine.orders, theirs.orders, deleted, "order", { it.id.toString() }, { it.changedAt }),
             requests = mergeList(mine.requests, theirs.requests, deleted, "req", { it.id.toString() }, { it.changedAt }),
+            recurring = mergeList(mine.recurring, theirs.recurring, deleted, "rec", { it.id }, { it.changedAt }),
             // чужой счётчик тоже двигаем: слоты разные, но пусть номера не отстают
             nextId = maxOf(mine.nextId, theirs.nextId),
             settings = mergeMoney(mine.settings, theirs.settings),

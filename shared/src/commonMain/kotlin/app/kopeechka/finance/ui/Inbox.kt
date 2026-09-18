@@ -22,6 +22,8 @@ import app.kopeechka.finance.AppViewModel
 import app.kopeechka.finance.ImageSource
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
+import app.kopeechka.finance.data.INBOX_PUSH
+import app.kopeechka.finance.data.INBOX_RECURRING
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
 import app.kopeechka.finance.ui.theme.T
@@ -66,7 +68,14 @@ fun InboxOverlay(vm: AppViewModel, c: Calc) {
                     }
                     Text(
                         listOf(
-                            l.t(if (item.source == INBOX_SMS) "inbox.fromSms" else "inbox.fromPhoto"),
+                            l.t(
+                                when (item.source) {
+                                    INBOX_SMS -> "inbox.fromSms"
+                                    INBOX_PUSH -> "inbox.fromPush"
+                                    INBOX_RECURRING -> "inbox.fromRecurring"
+                                    else -> "inbox.fromPhoto"
+                                },
+                            ),
                             c.dayLabel(item.date),
                             c.cat(item.cat).name,
                         ).joinToString(" · "),

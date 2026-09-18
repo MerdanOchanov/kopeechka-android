@@ -29,6 +29,7 @@ import app.kopeechka.finance.data.splitPayment
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
 import app.kopeechka.finance.data.INBOX_PHOTO
+import app.kopeechka.finance.data.INBOX_PUSH
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
 import app.kopeechka.finance.data.Receipt
@@ -43,7 +44,10 @@ import app.kopeechka.finance.data.OrderStatus
 import app.kopeechka.finance.data.Palette
 import app.kopeechka.finance.data.Period
 import app.kopeechka.finance.data.Product
+import app.kopeechka.finance.data.Every
 import app.kopeechka.finance.data.RateMode
+import app.kopeechka.finance.data.Recurring
+import app.kopeechka.finance.data.Recurrings
 import app.kopeechka.finance.data.rebaseRates
 import app.kopeechka.finance.data.RequestStatus
 import app.kopeechka.finance.data.Settings
@@ -102,7 +106,7 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 enum class Tab { HOME, OPS, BUDGET, REPORT, SETTINGS }
-enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS, SMS, SYNC }
+enum class Page { ACCOUNTS, CATEGORIES, GOALS, BACKUP, CURRENCIES, BUSINESS, PRODUCTS, CUSTOMERS, DEBTS, SMS, SYNC, RECURRING }
 enum class Kind(val key: String) {
     EXPENSE("kind.expense"),
     INCOME("kind.income"),
@@ -154,6 +158,21 @@ data class CatEdit(
     val limit: String = "",
     val income: Boolean = false,
     val color: String = "",
+)
+
+/** Регулярный платёж в работе: id пустой — новый. Суммы — текстом, как в поле ввода. */
+data class RecEdit(
+    val id: String? = null,
+    val title: String = "",
+    val amount: String = "",
+    val income: Boolean = false,
+    val accId: String = "",
+    val cat: String = "",
+    val every: String = Every.MONTH,
+    val start: Long = 0,
+    val total: String = "",
+    val auto: Boolean = false,
+    val remindDays: Int = 1,
 )
 
 /** Настройки WebDAV в работе. Пароль сюда не попадает — он в хранилище ключей. */
@@ -282,6 +301,9 @@ class AppViewModel(
     /** Открыт список заявок. */
     var requestsOpen by mutableStateOf(false)
 
+    /** Регулярный платёж, который сейчас правят. */
+    var recEdit by mutableStateOf<RecEdit?>(null)
+
     /** Вышла версия новее установленной — показываем полоску на главной. */
     var update by mutableStateOf<UpdateInfo?>(null)
         private set
@@ -315,6 +337,7 @@ class AppViewModel(
     fun pickedDate(): Long = when (datePick) {
         "order" -> orderDraft?.date
         "due" -> draft?.due ?: draft?.date?.plus(30)
+        "rec" -> recEdit?.start
         else -> draft?.date
     } ?: today().toEpochDay()
 
@@ -323,6 +346,7 @@ class AppViewModel(
             "order" -> orderDraft = orderDraft?.copy(date = day)
             "due" -> draft = draft?.copy(due = day)
             "tx" -> draft = draft?.copy(date = day)
+            "rec" -> recEdit = recEdit?.copy(start = day)
         }
         datePick = null
     }
@@ -397,6 +421,8 @@ class AppViewModel(
         val s = store.current.settings
         settleRequests()
         if (platform.updatesFromGitHub) checkUpdates(manual = false)
+        runRecurring()
+        platform.syncRecurring(store.current.recurring.isNotEmpty())
         platform.onLanguageChanged(l)
         platform.syncReminder(s.remind, s.remindHour)
         platform.syncAutoBackup(s.autoBackup && s.driveLinked)
@@ -423,6 +449,7 @@ class AppViewModel(
         when {
             confirm != null -> confirm = null
             inboxEdit != null -> inboxEdit = null
+            recEdit != null && datePick == null -> recEdit = null
             requestsOpen -> requestsOpen = false
             webdavEdit != null -> webdavEdit = null
             smsEdit != null -> smsEdit = null
@@ -1870,7 +1897,7 @@ class AppViewModel(
                 nextId = s.nextId + 1,
                 inbox = s.inbox.filterNot { it.id == item.id },
                 // в следующий раз тот же магазин попадёт в ту же категорию сам
-                merchantCats = if (item.source == INBOX_SMS && item.title.isNotBlank()) {
+                merchantCats = if ((item.source == INBOX_SMS || item.source == INBOX_PUSH) && item.title.isNotBlank()) {
                     s.merchantCats + (item.title.lowercase() to item.cat)
                 } else {
                     s.merchantCats
@@ -1891,6 +1918,25 @@ class AppViewModel(
     // ——— банковские СМС ———
 
     val canReadSms get() = platform.canReadSms
+
+    val canReadPush get() = platform.canReadPush
+
+    /** Разрешение выдают в системных настройках — спрашиваем при каждом показе экрана. */
+    fun pushAccess() = platform.pushAccessGranted()
+
+    /**
+     * Включение ведёт в системные настройки доступа к уведомлениям: иначе
+     * переключатель был бы включён, а читать было бы нечего.
+     */
+    fun setPushModule(on: Boolean) {
+        settings { it.copy(bankPush = on) }
+        if (on && !platform.pushAccessGranted()) {
+            say("push.grant")
+            platform.openPushAccessSettings()
+        }
+    }
+
+    fun openPushSettings() = platform.openPushAccessSettings()
 
     /**
      * Включение спрашивает разрешение и сразу разбирает историю: иначе человек
@@ -2044,6 +2090,8 @@ class AppViewModel(
                 ),
                 // с этого номера начинаются мои записи — чужие сюда не попадут
                 nextId = maxOf(s.nextId, Sync.slotStart(slot)),
+                // платежи без автора теперь мои: иначе их провели бы оба телефона
+                recurring = s.recurring.map { if (it.by.isEmpty()) it.copy(by = meId) else it },
             )
         }
     }
@@ -2431,6 +2479,96 @@ class AppViewModel(
         )
         say("msg.restored")
     }
+
+    // ——— регулярные платежи ———
+
+    /**
+     * Провести наступившие платежи. Вызывается при запуске: на iOS фоновых задач
+     * нет, а на Android это страховка, если фоновая задача не успела.
+     */
+    fun runRecurring() {
+        val me = store.current.space?.memberId.orEmpty()
+        var made = emptyList<String>()
+        store.update { cur ->
+            val run = Recurrings.due(cur, calc.todayDay, me) { r, n -> l.t("rec.installment", r.title, n, r.total) }
+            made = run.made
+            run.data
+        }
+        if (made.isNotEmpty()) say("rec.made", made.size)
+    }
+
+    fun openRecurring(id: String?) {
+        val d = store.current
+        val r = d.recurring.firstOrNull { it.id == id }
+        recEdit = if (r == null) {
+            RecEdit(
+                accId = d.accounts.firstOrNull()?.id.orEmpty(),
+                cat = d.categories.firstOrNull { !it.income }?.id.orEmpty(),
+                start = calc.todayDay,
+            )
+        } else {
+            RecEdit(
+                id = r.id, title = r.title, amount = numText(r.amount), income = r.income, accId = r.accId, cat = r.cat,
+                every = r.every, start = r.start, total = if (r.total > 0) r.total.toString() else "",
+                auto = r.auto, remindDays = r.remindDays,
+            )
+        }
+    }
+
+    fun saveRecurring() {
+        val e = recEdit ?: return
+        val title = e.title.trim()
+        val amount = num(e.amount)
+        if (title.isEmpty()) return say("rec.needTitle")
+        if (amount <= 0) return say("msg.amountNeeded")
+        if (e.accId.isEmpty()) return say("msg.pickAccount")
+        val total = e.total.trim().toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val me = store.current.space?.memberId.orEmpty()
+        store.update { s ->
+            val old = s.recurring.firstOrNull { it.id == e.id }
+            val r = Recurring(
+                id = e.id ?: "rec${s.nextId}",
+                title = title,
+                amount = amount,
+                income = e.income,
+                accId = e.accId,
+                cat = e.cat,
+                every = e.every,
+                start = e.start,
+                total = total,
+                // смена даты первого платежа не должна заново проводить уже проведённые
+                done = old?.done ?: 0,
+                auto = e.auto,
+                remindDays = e.remindDays,
+                remindedFor = old?.remindedFor ?: 0,
+                by = old?.by ?: me,
+            )
+            s.copy(
+                recurring = if (old == null) s.recurring + r else s.recurring.map { if (it.id == r.id) r else it },
+                nextId = if (old == null) s.nextId + 1 else s.nextId,
+            )
+        }
+        recEdit = null
+        platform.syncRecurring(true)
+        runRecurring()
+        say("rec.saved")
+    }
+
+    fun askDeleteRecurring(id: String) {
+        val r = store.current.recurring.firstOrNull { it.id == id } ?: return
+        confirm = Confirm(l.t("rec.deleteTitle"), l.t("rec.deleteText", r.title), l.t("common.delete")) {
+            store.update { s -> s.copy(recurring = s.recurring.filterNot { it.id == id }) }
+            recEdit = null
+            platform.syncRecurring(store.current.recurring.isNotEmpty())
+            say("rec.deleted")
+        }
+    }
+
+    fun toggleRecurring(id: String) = store.update { s ->
+        s.copy(recurring = s.recurring.map { if (it.id == id) it.copy(active = !it.active) else it })
+    }
+
+    fun upcomingPayments(days: Int = 7) = Recurrings.upcoming(store.current, calc.todayDay, days)
 
     // ——— обновления ———
 

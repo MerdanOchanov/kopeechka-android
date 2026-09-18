@@ -64,6 +64,8 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     override fun syncAutoBackup(on: Boolean) = Schedules.syncAutoBackup(ctx, on)
 
+    override fun syncRecurring(on: Boolean) = Schedules.syncRecurring(ctx, on)
+
     override fun onLanguageChanged(l: Lang) {
         DriveApi.folderName = l.t("backup.folder")
         Schedules.ensureChannel(ctx, l)
@@ -256,6 +258,21 @@ class AndroidPlatform(private val ctx: Context) : Platform {
             }
         }
         out
+    }
+
+    // ——— уведомления банков ———
+
+    override val canReadPush = true
+
+    override fun pushAccessGranted(): Boolean =
+        androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
+
+    override fun openPushAccessSettings() {
+        runCatching {
+            ctx.startActivity(
+                Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
     }
 
     // ——— обмен напрямую по Wi-Fi ———

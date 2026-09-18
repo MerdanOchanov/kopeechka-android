@@ -1,6 +1,7 @@
 package app.kopeechka.finance
 
 import app.kopeechka.finance.data.AppData
+import app.kopeechka.finance.data.INBOX_PUSH
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
 import app.kopeechka.finance.data.Lang
@@ -24,9 +25,9 @@ data class SmsResult(val title: String, val auto: Boolean)
 object SmsInbox {
 
     /** Разобрать сообщение и положить в «на проверку». null — сообщение не про деньги. */
-    fun handle(store: Storage, sender: String, text: String, at: Long, l: Lang): SmsResult? {
+    fun handle(store: Storage, sender: String, text: String, at: Long, l: Lang, fromPush: Boolean = false): SmsResult? {
         val d = store.current
-        if (!d.settings.sms) return null
+        if (if (fromPush) !d.settings.bankPush else !d.settings.sms) return null
         val src = SmsParse.pick(d.smsSources, sender, text) ?: return null
         val acc = d.accounts.firstOrNull { it.id == src.accId } ?: return null
         val parsed = SmsParse.parse(text, src, acc.cur) ?: return null
@@ -65,7 +66,7 @@ object SmsInbox {
                     inbox = listOf(
                         InboxItem(
                             id = s.nextId,
-                            source = INBOX_SMS,
+                            source = if (fromPush) INBOX_PUSH else INBOX_SMS,
                             at = at,
                             date = day,
                             title = parsed.title,

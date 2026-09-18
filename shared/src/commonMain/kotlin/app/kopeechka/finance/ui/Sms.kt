@@ -27,8 +27,13 @@ fun SmsPage(vm: AppViewModel, c: Calc) {
     val col = T.c
     val l = T.l
     ScreenColumn(gap = 18.dp) {
-        PageHeader(l.t("sms.title")) { vm.page = null }
+        PageHeader(l.t("bank.title")) { vm.page = null }
         Muted(l.t("sms.note"), 11.5f)
+        if (c.s.bankPush && !vm.pushAccess()) {
+            // переключатель включён, а система доступ не дала — объясняем и ведём в настройки
+            Muted(l.t("push.noAccessLong"), 11.5f, color = col.danger)
+            SecondaryButton(l.t("push.openSettings"), { vm.openPushSettings() }, Modifier.fillMaxWidth(), size = 13, upper = true)
+        }
 
         SectionTitle(l.t("sms.sources")) { GhostButton(l.t("sms.add"), { vm.openSmsSource(null) }) }
         if (c.d.smsSources.isEmpty()) {
@@ -50,7 +55,7 @@ fun SmsPage(vm: AppViewModel, c: Calc) {
                             Text(src.name, style = T.h(14.sp, if (src.enabled) col.text else col.n500), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 listOfNotNull(
-                                    src.sender,
+                                    c.d.pushApps[src.sender] ?: src.sender,
                                     src.cardMask.takeIf { it.isNotBlank() }?.let { "•$it" },
                                     acc?.let { "${it.name} · ${Currencies.sym(it.cur)}" },
                                     if (src.auto) l.t("sms.autoShort") else null,
@@ -93,9 +98,20 @@ fun SmsEditOverlay(vm: AppViewModel, c: Calc, e: SmsEdit) {
             }
         }
         Field(l.t("sms.name"), e.name, { vm.smsEdit = e.copy(name = it) }, placeholder = l.t("sms.nameHint"))
+        if (c.d.pushApps.isNotEmpty()) {
+            // банки, которые уже присылали уведомления с суммой: выбрать проще, чем вписать пакет
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Kicker(l.t("push.apps"))
+                ChipFlow {
+                    c.d.pushApps.forEach { (pkg, label) ->
+                        Chip(label, e.sender == pkg, { vm.smsEdit = e.copy(sender = pkg, name = e.name.ifBlank { label }) })
+                    }
+                }
+            }
+        }
         Field(
             l.t("sms.sender"),
-            e.sender,
+            c.d.pushApps[e.sender] ?: e.sender,
             { vm.smsEdit = e.copy(sender = it) },
             placeholder = l.t("sms.senderHint"),
             note = l.t("sms.senderNote"),

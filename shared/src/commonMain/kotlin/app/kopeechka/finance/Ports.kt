@@ -76,6 +76,9 @@ interface Platform {
     fun syncReminder(on: Boolean, hour: Int)
     fun syncAutoBackup(on: Boolean)
 
+    /** Проверять регулярные платежи раз в день, даже когда приложение закрыто. */
+    fun syncRecurring(on: Boolean)
+
     /** Язык сменился: поправить канал уведомлений и имя папки копий. */
     fun onLanguageChanged(l: Lang)
 
@@ -121,6 +124,15 @@ interface Platform {
 
     /** Сообщения за последние дни — чтобы разобрать уже пришедшее. */
     suspend fun readSmsHistory(days: Int): List<SmsMessage>
+
+    /** Умеет ли платформа читать уведомления других приложений. Только Android. */
+    val canReadPush: Boolean
+
+    /** Выдан ли доступ к уведомлениям — его включают в системных настройках. */
+    fun pushAccessGranted(): Boolean
+
+    /** Открыть системную страницу доступа к уведомлениям. */
+    fun openPushAccessSettings()
 
     // ——— обмен напрямую по Wi-Fi ———
 

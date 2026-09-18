@@ -138,6 +138,11 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                 },
             ) { vm.openPage(Page.BACKUP) }
             NavRow(
+                Icons.Bell,
+                l.t("rec.title"),
+                if (c.d.recurring.isEmpty()) l.t("rec.navEmpty") else l.n(c.d.recurring.size, "payment"),
+            ) { vm.openPage(Page.RECURRING) }
+            NavRow(
                 Icons.Clock,
                 l.t("debt.title"),
                 if (c.d.debts.isEmpty()) l.t("debt.navEmpty")
@@ -226,14 +231,21 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             )
         }
 
-        if (vm.canReadSms) {
+        if (vm.canReadSms || vm.canReadPush) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle(l.t("sms.title"))
+                SectionTitle(l.t("bank.title"))
                 Muted(l.t("sms.settingsNote"), 11.5f, color = col.n700)
-                SettingRow(l.t("sms.enable"), l.t("sms.enableSub")) {
-                    Toggle(s.sms) { vm.setSmsModule(it) }
+                if (vm.canReadPush) {
+                    SettingRow(l.t("push.enable"), if (s.bankPush && !vm.pushAccess()) l.t("push.noAccess") else l.t("push.enableSub")) {
+                        Toggle(s.bankPush) { vm.setPushModule(it) }
+                    }
                 }
-                if (s.sms) {
+                if (vm.canReadSms) {
+                    SettingRow(l.t("sms.enable"), l.t("sms.enableSub")) {
+                        Toggle(s.sms) { vm.setSmsModule(it) }
+                    }
+                }
+                if (s.sms || s.bankPush) {
                     SecondaryButton(l.t("sms.openPage"), { vm.openPage(Page.SMS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
                 }
             }

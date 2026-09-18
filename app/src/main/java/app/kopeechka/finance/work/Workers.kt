@@ -21,7 +21,12 @@ import androidx.work.WorkerParameters
 import app.kopeechka.finance.KopeechkaApp
 import app.kopeechka.finance.MainActivity
 import app.kopeechka.finance.R
+import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Lang
+import app.kopeechka.finance.data.Recurring
+import app.kopeechka.finance.data.Recurrings
+import app.kopeechka.finance.data.toEpochDay
+import app.kopeechka.finance.data.today
 import app.kopeechka.finance.net.DriveBackup
 import java.time.Duration
 import java.time.LocalDateTime
@@ -30,6 +35,39 @@ import java.util.concurrent.TimeUnit
 object Schedules {
     private const val BACKUP = "auto-backup"
     private const val REMIND = "evening-remind"
+    private const val RECURRING = "recurring-payments"
+
+    /** Раз в сутки провести наступившие платежи и напомнить о ближайших. */
+    fun syncRecurring(ctx: Context, enabled: Boolean) {
+        val wm = WorkManager.getInstance(ctx)
+        if (!enabled) {
+            wm.cancelUniqueWork(RECURRING)
+            return
+        }
+        val req = PeriodicWorkRequestBuilder<RecurringWorker>(12, TimeUnit.HOURS).build()
+        wm.enqueueUniquePeriodicWork(RECURRING, ExistingPeriodicWorkPolicy.KEEP, req)
+    }
+
+    /** Простое уведомление: заголовок, текст, открыть приложение. */
+    fun notifyPlain(ctx: Context, l: Lang, id: Int, title: String, text: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        ensureChannel(ctx, l)
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        runCatching { NotificationManagerCompat.from(ctx).notify(id, n) }
+    }
     const val CHANNEL = "remind"
 
     fun syncAutoBackup(ctx: Context, enabled: Boolean) {
@@ -130,6 +168,45 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             .setAutoCancel(true)
             .build()
         runCatching { NotificationManagerCompat.from(ctx).notify(21, n) }
+        return Result.success()
+    }
+}
+
+/**
+ * Регулярные платежи: провести наступившие и напомнить о ближайших.
+ * Та же логика работает при открытии приложения — здесь она нужна, чтобы
+ * напоминание пришло, даже если человек неделю не заходил.
+ */
+class RecurringWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext as KopeechkaApp
+        val d = app.store.current
+        if (d.recurring.isEmpty()) return Result.success()
+        val l = Lang.of(d.settings.lang)
+        val today = today().toEpochDay()
+        val me = d.space?.memberId.orEmpty()
+        val c = Calc(d, l = l)
+
+        var made = emptyList<String>()
+        app.store.update { cur ->
+            val run = Recurrings.due(cur, today, me) { r, n -> l.t("rec.installment", r.title, n, r.total) }
+            made = run.made
+            run.data
+        }
+        if (made.isNotEmpty()) {
+            Schedules.notifyPlain(applicationContext, l, 31, l.t("rec.notifyDoneTitle"), made.joinToString(", "))
+        }
+
+        var hits = emptyList<Pair<Recurring, Long>>()
+        app.store.update { cur ->
+            val (next, found) = Recurrings.reminders(cur, today, me)
+            hits = found
+            next
+        }
+        hits.forEachIndexed { i, (r, day) ->
+            val money = c.fmt(r.amount, c.accCur(r.accId))
+            Schedules.notifyPlain(applicationContext, l, 40 + i, l.t("rec.notifySoonTitle", r.title), l.t("rec.notifySoonText", money, c.dayLabel(day)))
+        }
         return Result.success()
     }
 }

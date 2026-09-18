@@ -130,6 +130,8 @@ data class Settings(
     val business: Boolean = false,
     /** Чтение банковских СМС. Только Android: iOS доступа к сообщениям не даёт. */
     val sms: Boolean = false,
+    /** Чтение уведомлений банковских приложений. Только Android. */
+    val bankPush: Boolean = false,
     /**
      * Когда последний раз меняли денежную модель — валюту, курсы, список валют.
      * Единственная часть настроек, общая для участников: см. Sync.
@@ -152,6 +154,8 @@ data class AppData(
     val orders: List<Order> = emptyList(),
     /** Заявки на расход с общих счетов. */
     val requests: List<SpendRequest> = emptyList(),
+    /** Регулярные платежи и рассрочки. */
+    val recurring: List<Recurring> = emptyList(),
     /** Общее пространство с другим человеком; null — веду один. */
     val space: SyncSpace? = null,
     /**
@@ -159,8 +163,13 @@ data class AppData(
      * записи, которые второй участник уже стёр. Чистится через полгода.
      */
     val deleted: Map<String, Long> = emptyMap(),
-    /** Правила чтения банковских СМС: от кого приходят и к какому счёту относятся. */
+    /** Правила чтения банковских СМС и уведомлений: от кого приходят и к какому счёту относятся. */
     val smsSources: List<SmsSource> = emptyList(),
+    /**
+     * Приложения, присылавшие уведомления с суммой: пакет → название. Чтобы
+     * в правиле банк выбирался из списка. Живёт только на этом телефоне.
+     */
+    val pushApps: Map<String, String> = emptyMap(),
     /**
      * Магазин → категория: приложение запоминает выбор человека и в следующий раз
      * подставляет ту же категорию само.
@@ -180,7 +189,7 @@ data class AppData(
  * человеку при синхронизации. Черновики остаются на телефоне: в них лежит
  * текст банковских СМС, которому в общей папке не место.
  */
-fun AppData.forExport(): AppData = copy(inbox = emptyList())
+fun AppData.forExport(): AppData = copy(inbox = emptyList(), pushApps = emptyMap())
 
 /**
  * Состояние для общего пространства. Кроме черновиков убираем то, что относится
@@ -189,6 +198,7 @@ fun AppData.forExport(): AppData = copy(inbox = emptyList())
 fun AppData.forSync(): AppData = copy(
     inbox = emptyList(),
     smsSources = emptyList(),
+    pushApps = emptyMap(),
     merchantCats = emptyMap(),
     space = null,
 )

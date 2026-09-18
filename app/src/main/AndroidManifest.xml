@@ -43,6 +43,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- Уведомления банковских приложений: доступ человек включает сам в системных
+             настройках, приложение читает только уведомления с суммами. -->
+        <service
+            android:name=".BankNotificationListener"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
