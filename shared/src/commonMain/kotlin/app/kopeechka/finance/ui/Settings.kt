@@ -285,6 +285,9 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
             SecondaryButton(l.t("set.loadDemo"), { vm.askLoadDemo() }, Modifier.fillMaxWidth(), size = 13, upper = true)
             DangerButton(l.t("set.clearAll"), { vm.askClearAll() })
             Muted(l.t("set.about", vm.version), 10.5f)
+            if (vm.canCheckUpdates) {
+                GhostButton(if (vm.checkingUpdates) l.t("common.wait") else l.t("upd.check"), { vm.checkUpdates(manual = true) }, size = 12)
+            }
         }
     }
 }
@@ -559,5 +562,14 @@ fun BackupPage(vm: AppViewModel, c: Calc) {
             }
         }
         if (s.driveLinked) GhostButton(l.t("backup.unlink"), { vm.unlinkDrive() })
+
+        // без облака: файл, который можно переслать себе в мессенджер
+        SectionTitle(l.t("file.title"))
+        Muted(l.t("file.note"), 11.5f, color = col.n700)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton(l.t("file.save"), { vm.saveBackupFile() }, Modifier.weight(1f), size = 12, upper = true)
+            SecondaryButton(l.t("file.share"), { vm.shareBackupFile() }, Modifier.weight(1f), size = 12, upper = true)
+        }
+        GhostButton(l.t("file.restore"), { vm.restoreFromFile() }, size = 13)
     }
 }

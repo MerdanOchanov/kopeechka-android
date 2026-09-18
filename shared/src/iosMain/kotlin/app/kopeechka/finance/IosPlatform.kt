@@ -31,6 +31,14 @@ class IosPlatform(private val storage: IosStorage) : Platform {
     override val version: String =
         (NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String) ?: "1.0"
 
+    /** На iPhone приложение приходит из App Store или от разработчика — не с GitHub. */
+    override val updatesFromGitHub = false
+
+    override fun openUrl(url: String) {
+        val u = platform.Foundation.NSURL.URLWithString(url) ?: return
+        platform.UIKit.UIApplication.sharedApplication.openURL(u, emptyMap<Any?, Any?>(), null)
+    }
+
     private val reminderId = "kopeechka.evening"
 
     override fun syncReminder(on: Boolean, hour: Int) {
@@ -67,11 +75,14 @@ class IosPlatform(private val storage: IosStorage) : Platform {
         DriveApi.folderName = l.t("backup.folder")
     }
 
-    override suspend fun saveTextFile(suggestedName: String, text: String): String? =
-        throw UnsupportedOperationException("файлы на iOS появятся вместе с UIDocumentPicker")
+    private val files = IosFiles()
 
-    override suspend fun openTextFile(): PickedFile? =
-        throw UnsupportedOperationException("файлы на iOS появятся вместе с UIDocumentPicker")
+    override suspend fun saveTextFile(suggestedName: String, text: String, mime: String): String? =
+        files.save(suggestedName, text)
+
+    override suspend fun openTextFile(): PickedFile? = files.open()
+
+    override fun shareTextFile(name: String, text: String, mime: String) = files.share(name, text)
 
     // ——— чеки ———
 

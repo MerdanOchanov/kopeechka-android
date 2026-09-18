@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Копеечка — скачать</title>
+<meta name="description" content="Копеечка — учёт личных и семейных финансов. Работает без интернета, данные хранятся только на телефоне.">
+<!--
+  Страница скачивания. Один файл без внешних зависимостей: её можно положить
+  на любой хостинг (например, arassanusga.com/kopeechka/) и открыть без VPN.
+  Номер версии и ссылка на APK подтягиваются из последнего выпуска на GitHub;
+  если GitHub недоступен, остаётся ссылка на страницу выпусков.
+-->
+<style>
+  :root { --bg:#f2f2f3; --ink:#1d1f20; --muted:#5b6166; --accent:#1e2b3c; --line:#d5d7da; --card:#e9e9ea; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121416; --ink:#e6eaec; --muted:#9aa3a9; --accent:#9fb8d6; --line:#2c3136; --card:#1b1e21; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:0 16px; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 40px 0 56px; }
+  h1 { font-size: 34px; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 6px; }
+  .lead { color: var(--muted); margin: 0 0 28px; }
+  .hero { background: var(--accent); color: #f2f2f3; padding: 22px; }
+  @media (prefers-color-scheme: dark) { .hero { color: #121416; } }
+  .ver { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
+  .btn { display:block; margin-top: 14px; padding: 15px; text-align:center; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+         text-decoration:none; background: var(--bg); color: var(--ink); border:1px solid var(--line); }
+  .alt { display:block; margin-top: 10px; font-size: 14px; color: inherit; opacity: .85; }
+  h2 { font-size: 15px; letter-spacing: .12em; text-transform: uppercase; margin: 34px 0 10px; }
+  ol, ul { padding-left: 20px; margin: 0; }
+  li { margin: 6px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); padding: 14px 16px; margin-top: 10px; }
+  .lang { display:flex; gap:8px; margin-bottom: 24px; }
+  .lang button { font: inherit; font-size: 14px; padding: 6px 12px; background: transparent; color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+  .lang button[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  [data-l] { display: none; }
+  body[data-lang="ru"] [data-l="ru"], body[data-lang="tk"] [data-l="tk"], body[data-lang="en"] [data-l="en"] { display: revert; }
+  footer { margin-top: 40px; font-size: 13px; color: var(--muted); }
+  a { color: inherit; }
+</style>
+</head>
+<body data-lang="ru">
+<main>
+  <div class="lang" role="group" aria-label="Язык">
+    <button type="button" data-set="ru" aria-pressed="true">Русский</button>
+    <button type="button" data-set="tk" aria-pressed="false">Türkmençe</button>
+    <button type="button" data-set="en" aria-pressed="false">English</button>
+  </div>
+
+  <h1>Копеечка</h1>
+  <p class="lead" data-l="ru">Учёт личных и семейных финансов. Работает без интернета, данные хранятся только на вашем телефоне.</p>
+  <p class="lead" data-l="tk">Şahsy we maşgala maliýesiniň hasaby. Internetsiz işleýär, maglumatlar diňe siziň telefonyňyzda saklanýar.</p>
+  <p class="lead" data-l="en">Personal and family finance. Works offline; your data stays on your phone.</p>
+
+  <section class="hero">
+    <div class="ver"><span data-l="ru">Версия</span><span data-l="tk">Wersiýa</span><span data-l="en">Version</span> <span id="ver">—</span></div>
+    <a class="btn" id="apk" href="https://github.com/MerdanOchanov/kopeechka-android/releases/latest">
+      <span data-l="ru">Скачать для Android</span><span data-l="tk">Android üçin ýükle</span><span data-l="en">Download for Android</span>
+    </a>
+    <a class="alt" href="https://github.com/MerdanOchanov/kopeechka-android/releases">
+      <span data-l="ru">Все версии</span><span data-l="tk">Ähli wersiýalar</span><span data-l="en">All versions</span>
+    </a>
+  </section>
+
+  <h2 data-l="ru">Как установить</h2>
+  <h2 data-l="tk">Nädip gurnamaly</h2>
+  <h2 data-l="en">How to install</h2>
+  <ol data-l="ru">
+    <li>Нажмите «Скачать для Android» и дождитесь загрузки файла.</li>
+    <li>Откройте скачанный файл. Телефон спросит разрешение устанавливать приложения из этого источника — разрешите.</li>
+    <li>Новая версия ставится поверх старой, данные сохраняются. О следующих версиях приложение сообщит само.</li>
+  </ol>
+  <ol data-l="tk">
+    <li>«Android üçin ýükle» düwmesine basyň we faýlyň ýüklenmegine garaşyň.</li>
+    <li>Ýüklenen faýly açyň. Telefon bu çeşmeden programma gurnamaga rugsat sorar — rugsat beriň.</li>
+    <li>Täze wersiýa köneniň üstünden gurnalýar, maglumatlar saklanýar. Indiki wersiýalar barada programma özi habar berer.</li>
+  </ol>
+  <ol data-l="en">
+    <li>Tap “Download for Android” and wait for the file.</li>
+    <li>Open the downloaded file. The phone will ask to allow installs from this source — allow it.</li>
+    <li>A new version installs over the old one and keeps your data. The app tells you about the next versions itself.</li>
+  </ol>
+
+  <h2 data-l="ru">Что умеет</h2>
+  <h2 data-l="tk">Näme edip bilýär</h2>
+  <h2 data-l="en">What it does</h2>
+  <ul data-l="ru">
+    <li>Счета в любых валютах, в том числе манат, и два курса — банковский и рыночный.</li>
+    <li>Бюджеты, цели, долги, отчёты, небольшой бизнес.</li>
+    <li>Общий бюджет на двоих — в том числе напрямую по Wi-Fi, без облака.</li>
+    <li>Копия в файл: отправьте её себе в IMO или Telegram и восстановите на любом телефоне.</li>
+    <li>Банковские СМС превращаются в черновики операций.</li>
+  </ul>
+  <ul data-l="tk">
+    <li>Islendik walýutada hasaplar, şol sanda manat, we iki hümmet — bank we bazar.</li>
+    <li>Býujetler, maksatlar, bergiler, hasabatlar, kiçi iş.</li>
+    <li>Iki adam üçin umumy býujet — şol sanda Wi-Fi arkaly, bulutsyz.</li>
+    <li>Faýla nusga: ony özüňize IMO ýa-da Telegram arkaly iberiň we islendik telefonda dikeldiň.</li>
+    <li>Bank SMS-leri amal çernowiklerine öwrülýär.</li>
+  </ul>
+  <ul data-l="en">
+    <li>Accounts in any currency, manat included, with two rates — bank and market.</li>
+    <li>Budgets, goals, debts, reports and a small business module.</li>
+    <li>A shared budget for two — even directly over Wi-Fi, without a cloud.</li>
+    <li>Backup to a file: send it to yourself and restore on any phone.</li>
+    <li>Bank SMS become draft operations.</li>
+  </ul>
+
+  <div class="card">
+    <span data-l="ru">Сервера у приложения нет: разработчик не видит ваших данных. Подробнее — в <a href="https://github.com/MerdanOchanov/kopeechka-android/blob/main/docs/PRIVACY.md">политике конфиденциальности</a>.</span>
+    <span data-l="tk">Programmanyň serweri ýok: işläp düzüji siziň maglumatlaryňyzy görmeýär. Jikme-jiklikler — <a href="https://github.com/MerdanOchanov/kopeechka-android/blob/main/docs/PRIVACY.md">gizlinlik syýasatynda</a>.</span>
+    <span data-l="en">The app has no server: the developer never sees your data. See the <a href="https://github.com/MerdanOchanov/kopeechka-android/blob/main/docs/PRIVACY.md">privacy policy</a>.</span>
+  </div>
+
+  <footer>© Kopeechka · <a href="https://github.com/MerdanOchanov/kopeechka-android">GitHub</a></footer>
+</main>
+
+<script>
+  // язык: сохранённый выбор, иначе язык браузера
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem('lang'); } catch (e) {}
+    var guess = (navigator.language || 'ru').slice(0, 2);
+    set(saved || (guess === 'tk' || guess === 'en' ? guess : 'ru'));
+    document.querySelectorAll('[data-set]').forEach(function (b) {
+      b.addEventListener('click', function () { set(b.getAttribute('data-set')); });
+    });
+    function set(l) {
+      document.body.setAttribute('data-lang', l);
+      document.documentElement.lang = l;
+      document.querySelectorAll('[data-set]').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.getAttribute('data-set') === l));
+      });
+      try { localStorage.setItem('lang', l); } catch (e) {}
+    }
+  })();
+
+  // последняя версия с GitHub; без сети остаётся ссылка на страницу выпусков
+  fetch('https://api.github.com/repos/MerdanOchanov/kopeechka-android/releases/latest')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (rel) {
+      if (!rel) return;
+      document.getElementById('ver').textContent = String(rel.tag_name || '').replace(/^v/, '');
+      var apk = (rel.assets || []).filter(function (a) { return /\.apk$/.test(a.name); })[0];
+      if (apk) document.getElementById('apk').href = apk.browser_download_url;
+    })
+    .catch(function () {});
+</script>
+</body>
+</html>

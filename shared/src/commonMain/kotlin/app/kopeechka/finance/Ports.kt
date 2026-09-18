@@ -43,6 +43,9 @@ interface SecretStore {
 /** Вход в Google не удался: код от Play services (10 — приложение не зарегистрировано). */
 class DriveAuthError(val code: Int) : Exception("drive auth failed: $code")
 
+const val MIME_CSV = "text/csv"
+const val MIME_JSON = "application/json"
+
 /** Выбранный человеком файл: имя для сообщения и содержимое. */
 data class PickedFile(val name: String, val text: String)
 
@@ -60,6 +63,15 @@ interface Platform {
     /** Версия приложения для строки «о программе». */
     val version: String
 
+    /**
+     * Ставят ли эту сборку файлом с GitHub. Тогда о новых версиях приложение
+     * сообщает само; сборки из Play и App Store обновляет магазин.
+     */
+    val updatesFromGitHub: Boolean
+
+    /** Открыть ссылку в браузере — например, чтобы скачать новую версию. */
+    fun openUrl(url: String)
+
     // ——— напоминания и фоновая копия ———
     fun syncReminder(on: Boolean, hour: Int)
     fun syncAutoBackup(on: Boolean)
@@ -69,8 +81,17 @@ interface Platform {
 
     // ——— файлы ———
 
-    /** Системный диалог «куда сохранить». Возвращает имя файла либо null, если отменили. */
-    suspend fun saveTextFile(suggestedName: String, text: String): String?
+    /**
+     * Системный диалог «куда сохранить». Возвращает имя файла либо null, если отменили.
+     * [mime] нужен Android: по нему диалог подставляет расширение.
+     */
+    suspend fun saveTextFile(suggestedName: String, text: String, mime: String = MIME_CSV): String?
+
+    /**
+     * Отправить файл через системное «Поделиться» — в мессенджер, почту, на флешку.
+     * Там, где Google недоступен, это самый надёжный способ унести копию с телефона.
+     */
+    fun shareTextFile(name: String, text: String, mime: String)
 
     /** Системный диалог «что открыть». null, если отменили. */
     suspend fun openTextFile(): PickedFile?

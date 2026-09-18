@@ -76,6 +76,8 @@ import app.kopeechka.finance.net.syncJson
 import app.kopeechka.finance.net.SyncError
 import app.kopeechka.finance.net.SyncTransport
 import app.kopeechka.finance.net.WebDavSync
+import app.kopeechka.finance.net.UpdateInfo
+import app.kopeechka.finance.net.Updates
 import app.kopeechka.finance.net.DriveError
 import app.kopeechka.finance.net.RemoteBackup
 import app.kopeechka.finance.net.formatBackupTime
@@ -278,6 +280,13 @@ class AppViewModel(
     /** Открыт список заявок. */
     var requestsOpen by mutableStateOf(false)
 
+    /** Вышла версия новее установленной — показываем полоску на главной. */
+    var update by mutableStateOf<UpdateInfo?>(null)
+        private set
+
+    var checkingUpdates by mutableStateOf(false)
+        private set
+
     /** Адрес, по которому этот телефон сейчас принимает обмен; null — не принимает. */
     var lanHostAddress by mutableStateOf<String?>(null)
         private set
@@ -385,6 +394,7 @@ class AppViewModel(
     init {
         val s = store.current.settings
         settleRequests()
+        if (platform.updatesFromGitHub) checkUpdates(manual = false)
         platform.onLanguageChanged(l)
         platform.syncReminder(s.remind, s.remindHour)
         platform.syncAutoBackup(s.autoBackup && s.driveLinked)
@@ -1089,10 +1099,10 @@ class AppViewModel(
     }
 
     /** Сохранение через системный диалог: платформа сама спросит, куда положить файл. */
-    private fun saveFile(name: String, text: String, done: (String) -> Unit) {
+    private fun saveFile(name: String, text: String, mime: String = MIME_CSV, done: (String) -> Unit) {
         viewModelScope.launch {
             val saved = try {
-                platform.saveTextFile(name, text)
+                platform.saveTextFile(name, text, mime)
             } catch (e: Exception) {
                 return@launch say("csv.fileError")
             }
@@ -2384,21 +2394,84 @@ class AppViewModel(
             l.t("common.restore"),
         ) {
             driveAction { t ->
-                val restored = store.parseBackup(DriveApi.download(t, b.id))
-                platform.saveBeforeRestore(store.exportJson())
-                val keep = store.current.settings
-                store.replace(
-                    restored.copy(
-                        settings = restored.settings.copy(
-                            onboarded = true,
-                            driveLinked = true,
-                            autoBackup = keep.autoBackup,
-                            lastBackupAt = keep.lastBackupAt,
-                        ),
-                    ),
-                )
-                say("msg.restored")
+                applyRestored(store.parseBackup(DriveApi.download(t, b.id)), driveLinked = true)
             }
+        }
+    }
+
+    /**
+     * Заменить данные восстановленной копией. Перед этим текущее состояние
+     * ложится рядом страховочным файлом, а личные настройки копии — связь
+     * с Диском, автокопия — берутся с этого телефона, а не из копии.
+     */
+    private fun applyRestored(restored: AppData, driveLinked: Boolean) {
+        platform.saveBeforeRestore(store.exportJson())
+        val keep = store.current.settings
+        store.replace(
+            restored.copy(
+                settings = restored.settings.copy(
+                    onboarded = true,
+                    driveLinked = driveLinked,
+                    autoBackup = keep.autoBackup,
+                    lastBackupAt = keep.lastBackupAt,
+                ),
+                // черновики и общее пространство живут на телефоне, а не в копии
+                inbox = store.current.inbox,
+                space = store.current.space,
+            ),
+        )
+        say("msg.restored")
+    }
+
+    // ——— обновления ———
+
+    val canCheckUpdates get() = platform.updatesFromGitHub
+
+    /** При запуске молча, по кнопке — с ответом даже если обновлять нечего. */
+    fun checkUpdates(manual: Boolean) {
+        if (checkingUpdates) return
+        checkingUpdates = true
+        viewModelScope.launch {
+            try {
+                update = Updates.check(platform.version)
+                if (manual) say(if (update == null) "upd.latest" else "upd.found", update?.version ?: platform.version)
+            } finally {
+                checkingUpdates = false
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        update?.let { platform.openUrl(it.apkUrl) }
+    }
+
+    fun dismissUpdate() {
+        update = null
+    }
+
+    // ——— копия в файл ———
+
+    private fun backupName() = "kopeechka-backup-${today().isoString()}.json"
+
+    /** Сохранить копию файлом — туда, куда укажет человек. */
+    fun saveBackupFile() = saveFile(backupName(), store.exportJson(), MIME_JSON) { name -> say("file.saved", name) }
+
+    /** Отправить копию в мессенджер: в Туркменистане это надёжнее облака. */
+    fun shareBackupFile() {
+        runCatching { platform.shareTextFile(backupName(), store.exportJson(), MIME_JSON) }
+            .onFailure { say("csv.fileError") }
+    }
+
+    fun restoreFromFile() {
+        viewModelScope.launch {
+            val file = runCatching { platform.openTextFile() }.getOrNull() ?: return@launch
+            val restored = runCatching { store.parseBackup(file.text) }.getOrNull()
+                ?: return@launch say("file.notBackup", file.name)
+            confirm = Confirm(
+                l.t("msg.restoreTitle"),
+                l.t("file.restoreText", file.name, l.n(restored.txs.size, "op")),
+                l.t("common.restore"),
+            ) { applyRestored(restored, driveLinked = store.current.settings.driveLinked) }
         }
     }
 

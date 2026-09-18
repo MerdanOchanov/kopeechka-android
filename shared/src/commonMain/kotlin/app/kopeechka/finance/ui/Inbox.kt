@@ -140,8 +140,12 @@ fun InboxBar(vm: AppViewModel, c: Calc) {
     val l = T.l
     val waiting = c.d.inbox.size
     val scan = vm.canScan()
-    if (waiting == 0 && !scan) return
+    val update = vm.update
+    if (waiting == 0 && !scan && update == null) return
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (update != null) {
+            BarRow(l.t("upd.bar", update.version), l.t("upd.download"), strong = true) { vm.downloadUpdate() }
+        }
         if (waiting > 0) {
             BarRow(
                 l.t("inbox.waiting", l.n(waiting, "draft")),

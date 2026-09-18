@@ -3,4 +3,6 @@
      прямой file:// Android с 7.0 не принимает. -->
 <paths>
     <cache-path name="receipts" path="receipts/" />
+    <!-- файлы, которые отдаём через «Поделиться»: резервная копия, выгрузка -->
+    <cache-path name="share" path="share/" />
 </paths>

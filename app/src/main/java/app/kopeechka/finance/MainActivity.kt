@@ -41,6 +41,10 @@ class MainActivity : ComponentActivity() {
         host.platform.onFileChosen(uri)
     }
 
+    private val createJson = registerForActivityResult(ActivityResultContracts.CreateDocument(MIME_JSON)) { uri ->
+        host.platform.onFileChosen(uri)
+    }
+
     private val openCsv = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         host.platform.onFileChosen(uri)
     }
@@ -74,10 +78,12 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 host.platform.prompts.collect { req ->
-                    if (req.kind == "create") {
-                        createCsv.launch(req.name)
-                    } else {
-                        openCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*"))
+                    when {
+                        req.kind == "create" && req.mime == MIME_JSON -> createJson.launch(req.name)
+                        req.kind == "create" -> createCsv.launch(req.name)
+                        else -> openCsv.launch(
+                            arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/json", "application/vnd.ms-excel", "*/*"),
+                        )
                     }
                 }
             }

@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Что показать системе: сохранить файл с таким именем или открыть существующий. */
-data class FilePrompt(val kind: String, val name: String)
+data class FilePrompt(val kind: String, val name: String, val mime: String = MIME_CSV)
 
 /**
  * Android-сторона платформенных портов: напоминания, системные диалоги файлов
@@ -36,6 +36,14 @@ data class FilePrompt(val kind: String, val name: String)
 class AndroidPlatform(private val ctx: Context) : Platform {
 
     override val version: String = BuildConfig.VERSION_NAME
+
+    override val updatesFromGitHub = BuildConfig.UPDATES_FROM_GITHUB
+
+    override fun openUrl(url: String) {
+        runCatching {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
 
     val prompts = MutableSharedFlow<FilePrompt>(extraBufferCapacity = 1)
     val authRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
@@ -63,8 +71,8 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     // ——— файлы ———
 
-    override suspend fun saveTextFile(suggestedName: String, text: String): String? {
-        val uri = ask(FilePrompt("create", suggestedName)) ?: return null
+    override suspend fun saveTextFile(suggestedName: String, text: String, mime: String): String? {
+        val uri = ask(FilePrompt("create", suggestedName, mime)) ?: return null
         ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
         return nameOf(uri)
     }
@@ -73,6 +81,17 @@ class AndroidPlatform(private val ctx: Context) : Platform {
         val uri = ask(FilePrompt("open", "")) ?: return null
         val text = ctx.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
         return PickedFile(nameOf(uri), text)
+    }
+
+    override fun shareTextFile(name: String, text: String, mime: String) {
+        val dir = File(ctx.cacheDir, "share").apply { mkdirs() }
+        val file = File(dir, name).apply { writeText(text) }
+        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType(mime)
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        ctx.startActivity(Intent.createChooser(send, name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     private suspend fun ask(prompt: FilePrompt): Uri? {

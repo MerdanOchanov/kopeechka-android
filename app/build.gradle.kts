@@ -52,12 +52,14 @@ android {
         create("full") {
             dimension = "store"
             buildConfigField("boolean", "SMS_ENABLED", "true")
+            buildConfigField("boolean", "UPDATES_FROM_GITHUB", "true")
         }
         create("play") {
             dimension = "store"
             // под этим именем приложение заведено в Play Console — поменять его там уже нельзя
             applicationId = "com.arassanusga.kopeechka"
             buildConfigField("boolean", "SMS_ENABLED", "false")
+            buildConfigField("boolean", "UPDATES_FROM_GITHUB", "false")
         }
     }
 
