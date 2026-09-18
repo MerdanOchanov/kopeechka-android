@@ -116,11 +116,46 @@ class AndroidPlatform(private val ctx: Context) : Platform {
     override val canPickImage = true
 
     override suspend fun pickImage(source: ImageSource): PickedImage? {
+        val uri = askImage(source) ?: return null
+        return runCatching { PickedImage(encode(uri)) }.getOrNull()
+    }
+
+    override suspend fun scanQr(source: ImageSource): String? {
+        val uri = askImage(source) ?: return null
+        return withContext(Dispatchers.Default) { runCatching { decodeQr(uri) }.getOrNull() }
+    }
+
+    private suspend fun askImage(source: ImageSource): Uri? {
         val waiter = CompletableDeferred<Uri?>()
         pendingImage = waiter
         imagePrompts.emit(source)
-        val uri = waiter.await() ?: return null
-        return runCatching { PickedImage(encode(uri)) }.getOrNull()
+        return waiter.await()
+    }
+
+    /**
+     * QR на снимке. Берём картинку крупнее, чем для ИИ: код на чеке маленький,
+     * и при сильном сжатии модули сливаются. Второй проход другим бинаризатором
+     * выручает на мятой бумаге и при неровном свете.
+     */
+    private fun decodeQr(uri: Uri): String? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = generateSequence(1) { it * 2 }.first { longest / it <= QR_SIDE }
+        }
+        val bmp = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
+        val pixels = IntArray(bmp.width * bmp.height)
+        bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+        val source = com.google.zxing.RGBLuminanceSource(bmp.width, bmp.height, pixels)
+        val hints = mapOf(
+            com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to listOf(com.google.zxing.BarcodeFormat.QR_CODE),
+            com.google.zxing.DecodeHintType.TRY_HARDER to true,
+        )
+        val reader = com.google.zxing.MultiFormatReader()
+        return runCatching { reader.decode(com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source)), hints).text }
+            .recoverCatching { reader.decode(com.google.zxing.BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(source)), hints).text }
+            .getOrNull()
     }
 
     /** Activity спрашивает, куда камере писать снимок. */
@@ -288,6 +323,7 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     private companion object {
         const val MAX_SIDE = 1600
+        const val QR_SIDE = 2400
         const val MAX_SMS = 500
     }
 }

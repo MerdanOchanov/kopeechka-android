@@ -95,6 +95,8 @@ class IosPlatform(private val storage: IosStorage) : Platform {
 
     override suspend fun pickImage(source: ImageSource): PickedImage? = picker.pick(source)
 
+    override suspend fun scanQr(source: ImageSource): String? = picker.scanQr(source)
+
     // ——— банковские СМС ———
 
     /**

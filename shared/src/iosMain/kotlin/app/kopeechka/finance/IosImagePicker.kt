@@ -5,6 +5,12 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.CoreGraphics.CGRectMake
+import platform.CoreImage.CIDetector
+import platform.CoreImage.CIDetectorAccuracy
+import platform.CoreImage.CIDetectorAccuracyHigh
+import platform.CoreImage.CIDetectorTypeQRCode
+import platform.CoreImage.CIImage
+import platform.CoreImage.CIQRCodeFeature
 import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSData
 import platform.Foundation.base64EncodedStringWithOptions
@@ -35,7 +41,22 @@ class IosImagePicker {
 
     private var keepAlive: PickerDelegate? = null
 
-    suspend fun pick(source: ImageSource): PickedImage? = suspendCancellableCoroutine { cont ->
+    suspend fun pick(source: ImageSource): PickedImage? = pickRaw(source)?.let { encode(it) }
+
+    /** QR-код на снимке — встроенным распознаванием CoreImage, без сети. */
+    suspend fun scanQr(source: ImageSource): String? {
+        val image = pickRaw(source) ?: return null
+        val cg = image.CGImage ?: return null
+        val detector = CIDetector.detectorOfType(
+            CIDetectorTypeQRCode,
+            context = null,
+            options = mapOf<Any?, Any?>(CIDetectorAccuracy to CIDetectorAccuracyHigh),
+        ) ?: return null
+        return detector.featuresInImage(CIImage.imageWithCGImage(cg))
+            .firstNotNullOfOrNull { (it as? CIQRCodeFeature)?.messageString }
+    }
+
+    private suspend fun pickRaw(source: ImageSource): UIImage? = suspendCancellableCoroutine { cont ->
         val root = rootController()
         val cameraReady = UIImagePickerController.isSourceTypeAvailable(
             UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera,
@@ -54,7 +75,7 @@ class IosImagePicker {
         )
         val delegate = PickerDelegate { image ->
             keepAlive = null
-            cont.resume(image?.let { encode(it) })
+            cont.resume(image)
         }
         keepAlive = delegate
         picker.setDelegate(delegate)

@@ -124,6 +124,9 @@ dependencies {
 
     // HTTP для Диска и ИИ-советника живёт в :shared на Ktor
 
+    // QR-код кассового чека: читаем со снимка без сети и без Google
+    implementation("com.google.zxing:core:3.5.3")
+
     // Приём обмена напрямую по Wi-Fi: маленький сервер на одну ручку
     implementation("io.ktor:ktor-server-cio:3.0.3")
 

@@ -28,7 +28,9 @@ import app.kopeechka.finance.data.debtLeft
 import app.kopeechka.finance.data.splitPayment
 import app.kopeechka.finance.data.Cut
 import app.kopeechka.finance.data.Demo
+import app.kopeechka.finance.data.FiscalQr
 import app.kopeechka.finance.data.INBOX_PHOTO
+import app.kopeechka.finance.data.INBOX_QR
 import app.kopeechka.finance.data.INBOX_PUSH
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
@@ -1843,6 +1845,47 @@ class AppViewModel(
     fun canScan(): Boolean {
         val p = Ai.provider(store.current.settings.aiProvider)
         return platform.canPickImage && (!p.needsKey || hasKey(p.key))
+    }
+
+    /** QR работает без ключа ИИ и без интернета — нужна только камера. */
+    val canScanQr get() = platform.canPickImage
+
+    /**
+     * Чек по QR-коду: дата, сумма и тип операции прямо из кода. Счёт — первый
+     * в основной валюте: российский чек всегда в рублях, казахстанский в тенге.
+     */
+    fun scanQr(source: ImageSource) {
+        viewModelScope.launch {
+            val text = runCatching { platform.scanQr(source) }.getOrNull() ?: return@launch say("qr.notFound")
+            val r = FiscalQr.parse(text) ?: return@launch say("qr.notReceipt")
+            val c = calc
+            val d = store.current
+            val acc = d.accounts.firstOrNull { it.cur == c.main }?.id ?: d.accounts.firstOrNull()?.id.orEmpty()
+            val cat = d.categories.firstOrNull { it.income == r.income }?.id.orEmpty()
+            store.update { s ->
+                s.copy(
+                    inbox = listOf(
+                        InboxItem(
+                            id = s.nextId,
+                            source = INBOX_QR,
+                            at = Clock.System.now().toEpochMilliseconds(),
+                            date = r.date ?: c.todayDay,
+                            title = l.t("inbox.receipt"),
+                            amount = r.amount,
+                            cur = c.accCur(acc),
+                            income = r.income,
+                            accId = acc,
+                            cat = cat,
+                            raw = text.take(300),
+                        ),
+                    ) + s.inbox,
+                    nextId = s.nextId + 1,
+                )
+            }
+            inboxOpen = true
+            inboxEdit = store.current.inbox.firstOrNull()
+            if (r.amount <= 0) say("qr.noSum")
+        }
     }
 
     fun scanReceipt(source: ImageSource) {

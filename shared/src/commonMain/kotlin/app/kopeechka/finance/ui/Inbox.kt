@@ -23,6 +23,7 @@ import app.kopeechka.finance.ImageSource
 import app.kopeechka.finance.data.Calc
 import app.kopeechka.finance.data.Currencies
 import app.kopeechka.finance.data.INBOX_PUSH
+import app.kopeechka.finance.data.INBOX_QR
 import app.kopeechka.finance.data.INBOX_RECURRING
 import app.kopeechka.finance.data.INBOX_SMS
 import app.kopeechka.finance.data.InboxItem
@@ -73,6 +74,7 @@ fun InboxOverlay(vm: AppViewModel, c: Calc) {
                                     INBOX_SMS -> "inbox.fromSms"
                                     INBOX_PUSH -> "inbox.fromPush"
                                     INBOX_RECURRING -> "inbox.fromRecurring"
+                                    INBOX_QR -> "inbox.fromQr"
                                     else -> "inbox.fromPhoto"
                                 },
                             ),
@@ -133,9 +135,25 @@ fun ScanSourceSheet(vm: AppViewModel) {
     val l = T.l
     BottomSheet({ vm.scanSheet = false }) {
         Text(l.t("inbox.scanTitle").uppercase(), style = T.h(13.sp, col.text, 0.12.em))
-        Muted(l.t("inbox.scanNote"), 11f)
-        PrimaryButton(l.t("inbox.camera"), { vm.scanSheet = false; vm.scanReceipt(ImageSource.CAMERA) })
-        GhostButton(l.t("inbox.gallery"), { vm.scanSheet = false; vm.scanReceipt(ImageSource.GALLERY) }, size = 13)
+
+        // QR-код: без интернета и без ключа — годится везде, где на чеке он есть
+        Kicker(l.t("qr.title"))
+        Muted(l.t("qr.note"), 11f)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PrimaryButton(l.t("inbox.camera"), { vm.scanSheet = false; vm.scanQr(ImageSource.CAMERA) }, Modifier.weight(1f))
+            SecondaryButton(l.t("inbox.gallery"), { vm.scanSheet = false; vm.scanQr(ImageSource.GALLERY) }, Modifier.weight(1f), size = 12, upper = true)
+        }
+
+        Kicker(l.t("qr.aiTitle"))
+        if (vm.canScan()) {
+            Muted(l.t("inbox.scanNote"), 11f)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryButton(l.t("inbox.camera"), { vm.scanSheet = false; vm.scanReceipt(ImageSource.CAMERA) }, Modifier.weight(1f), size = 12, upper = true)
+                SecondaryButton(l.t("inbox.gallery"), { vm.scanSheet = false; vm.scanReceipt(ImageSource.GALLERY) }, Modifier.weight(1f), size = 12, upper = true)
+            }
+        } else {
+            Muted(l.t("qr.aiNoKey"), 11f)
+        }
     }
 }
 
@@ -148,7 +166,7 @@ fun InboxBar(vm: AppViewModel, c: Calc) {
     val col = T.c
     val l = T.l
     val waiting = c.d.inbox.size
-    val scan = vm.canScan()
+    val scan = vm.canScan() || vm.canScanQr
     val update = vm.update
     if (waiting == 0 && !scan && update == null) return
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
