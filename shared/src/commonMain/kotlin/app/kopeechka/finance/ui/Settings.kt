@@ -307,11 +307,20 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
         }
 
         // ——— о приложении ———
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionTitle(l.t("set.aboutTitle"))
+            SettingRow(l.t("set.version"), vm.versionFull)
+            SecondaryButton(
+                if (vm.checkingUpdates) l.t("common.wait") else l.t("upd.check"),
+                { vm.checkUpdatesAnywhere() },
+                Modifier.fillMaxWidth(),
+                size = 13,
+                upper = true,
+            )
+            SettingRow(l.t("set.privacy"), onClick = { vm.openLink(PRIVACY_URL) }) { Text("›", style = T.h(18.sp, col.n500)) }
+            SettingRow(l.t("set.feedback"), onClick = { vm.openLink(ISSUES_URL) }) { Text("›", style = T.h(18.sp, col.n500)) }
+            SettingRow(l.t("set.source"), onClick = { vm.openLink(REPO_URL) }) { Text("›", style = T.h(18.sp, col.n500)) }
             Muted(l.t("set.about", vm.version), 10.5f)
-            if (vm.canCheckUpdates) {
-                GhostButton(if (vm.checkingUpdates) l.t("common.wait") else l.t("upd.check"), { vm.checkUpdates(manual = true) }, size = 12)
-            }
         }
     }
 }
@@ -416,18 +425,34 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
 private fun MarketRateField(vm: AppViewModel, code: String, rate: Double?, mainCur: String) {
     val col = T.c
     var text by remember(code) { mutableStateOf(rate?.let { fmtRate(it) }.orEmpty()) }
+    // курс поменяли не здесь (подтянули из ЦБ, сменили основную валюту) — показываем новый
+    LaunchedEffect(rate) { if (!sameRate(text, rate)) text = rate?.let { fmtRate(it) }.orEmpty() }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.width(104.dp)) {
-            Field(null, text, { text = it; vm.setMarketRate(code, it) }, numeric = true, placeholder = T.l.t("rate.same"))
+            Field(null, text, { text = it; vm.setMarketRate(code, it) }, numeric = true, placeholder = T.l.t("rate.marketHint"))
         }
         Text(Currencies.sym(mainCur), style = T.b(14.sp, col.n700))
     }
 }
 
+/**
+ * Текст в поле уже означает этот курс? Тогда не трогаем его: человек может
+ * быть посреди ввода («3,» — это ещё 3), и перезапись сбила бы курсор.
+ */
+private fun sameRate(text: String, rate: Double?): Boolean {
+    val typed = text.replace(" ", "").replace(',', '.').toDoubleOrNull()
+    return if (typed == null || rate == null) typed == rate else kotlin.math.abs(typed - rate) < 1e-9
+}
+
+private const val PRIVACY_URL = "https://github.com/MerdanOchanov/kopeechka-android/blob/main/docs/PRIVACY.md"
+private const val ISSUES_URL = "https://github.com/MerdanOchanov/kopeechka-android/issues"
+private const val REPO_URL = "https://github.com/MerdanOchanov/kopeechka-android"
+
 @Composable
 private fun RateField(vm: AppViewModel, code: String, rate: Double, mainCur: String) {
     val col = T.c
     var text by remember(code) { mutableStateOf(fmtRate(rate)) }
+    LaunchedEffect(rate) { if (!sameRate(text, rate)) text = fmtRate(rate) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.width(104.dp)) {
             Field(null, text, { text = it; vm.setRate(code, it) }, numeric = true, placeholder = "0")

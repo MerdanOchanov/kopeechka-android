@@ -19,6 +19,7 @@ import app.kopeechka.finance.net.DriveApi
 import app.kopeechka.finance.net.DriveBackup
 import app.kopeechka.finance.work.Schedules
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -44,6 +45,24 @@ class AndroidPlatform(private val ctx: Context) : Platform {
      */
     override val updatesFromGitHub: Boolean by lazy {
         BuildConfig.UPDATES_FROM_GITHUB && installer() != PLAY_STORE
+    }
+
+    override val build: String = BuildConfig.VERSION_CODE.toString()
+
+    /** Поставлено из Play — обновления там же: открываем страницу приложения в магазине. */
+    override fun openStorePage(): Boolean {
+        if (installer() != PLAY_STORE) return false
+        val pkg = ctx.packageName
+        return runCatching {
+            ctx.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.recoverCatching {
+            ctx.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.isSuccess
     }
 
     private fun installer(): String? = runCatching {
@@ -258,15 +277,37 @@ class AndroidPlatform(private val ctx: Context) : Platform {
         return waiter.await()
     }
 
+    /**
+     * Ответ экрана согласия. Раньше любая ошибка здесь молча превращалась
+     * в «отменили», и человек видел выбор аккаунта — и больше ничего.
+     * Теперь код ошибки Google доходит до экрана и в журнал.
+     */
     fun onAuthResult(data: Intent?) {
-        val token = runCatching { DriveBackup.resultFromIntent(ctx, data).accessToken }.getOrNull()
-        pendingAuth?.complete(token)
+        val waiter = pendingAuth ?: return
         pendingAuth = null
+        try {
+            val token = DriveBackup.resultFromIntent(ctx, data).accessToken
+            if (token.isNullOrBlank()) {
+                android.util.Log.w(TAG, "Google вернул согласие без токена")
+                waiter.completeExceptionally(DriveAuthError(NO_TOKEN))
+            } else {
+                waiter.complete(token)
+            }
+        } catch (e: ApiException) {
+            android.util.Log.w(TAG, "Google отказал в доступе к Диску: ${e.statusCode}", e)
+            waiter.completeExceptionally(DriveAuthError(e.statusCode))
+        }
     }
 
-    fun onAuthCancelled() {
-        pendingAuth?.complete(null)
+    /** Окно закрылось без успеха: это либо отмена, либо ошибка — различаем по коду. */
+    fun onAuthCancelled(data: Intent?) {
+        val waiter = pendingAuth ?: return
         pendingAuth = null
+        val code = runCatching { DriveBackup.resultFromIntent(ctx, data); null }
+            .exceptionOrNull()
+            .let { (it as? ApiException)?.statusCode }
+        android.util.Log.w(TAG, "Экран согласия закрыт без успеха, код: $code")
+        if (code == null || code == CommonStatusCodes.CANCELED) waiter.complete(null) else waiter.completeExceptionally(DriveAuthError(code))
     }
 
     override fun saveBeforeRestore(json: String) {
@@ -374,3 +415,8 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
 /** Пакет Google Play — так Android называет установщика из магазина. */
 private const val PLAY_STORE = "com.android.vending"
+
+private const val TAG = "Kopeechka"
+
+/** Своё значение: согласие получено, а токена в ответе нет. */
+private const val NO_TOKEN = -2

@@ -2601,7 +2601,9 @@ class AppViewModel(
             try {
                 val token = platform.driveToken()
                 if (token == null) {
+                    // человек сам закрыл окно — говорим об этом, а не молчим
                     driveBusy = false
+                    say("msg.driveCancelled")
                     return@launch
                 }
                 runDrive(token, action)
@@ -2838,6 +2840,23 @@ class AppViewModel(
     // ——— обновления ———
 
     val canCheckUpdates get() = platform.updatesFromGitHub
+
+    /** «1.8 (11)» — версия и номер сборки, как в Play Console. */
+    val versionFull get() = if (platform.build.isBlank()) platform.version else "${platform.version} (${platform.build})"
+
+    /**
+     * Проверить обновления: поставленное с GitHub спрашивает GitHub, а из Play —
+     * открывает страницу в магазине (обновляться в обход Play правила не разрешают).
+     */
+    fun checkUpdatesAnywhere() {
+        when {
+            platform.updatesFromGitHub -> checkUpdates(manual = true)
+            platform.openStorePage() -> Unit
+            else -> say("upd.latest", platform.version)
+        }
+    }
+
+    fun openLink(url: String) = platform.openUrl(url)
 
     /** При запуске молча, по кнопке — с ответом даже если обновлять нечего. */
     fun checkUpdates(manual: Boolean) {

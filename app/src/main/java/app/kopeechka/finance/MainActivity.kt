@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val authLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode == RESULT_OK) host.platform.onAuthResult(r.data) else host.platform.onAuthCancelled()
+        if (r.resultCode == RESULT_OK) host.platform.onAuthResult(r.data) else host.platform.onAuthCancelled(r.data)
     }
 
     private val createCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
