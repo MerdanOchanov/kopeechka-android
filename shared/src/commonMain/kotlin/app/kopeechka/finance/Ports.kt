@@ -128,6 +128,22 @@ interface Platform {
     /** Спросить разрешение на чтение сообщений. false — отказали. */
     suspend fun requestSmsAccess(): Boolean
 
+    /** Выдано ли уже разрешение на чтение сообщений. */
+    fun smsGranted(): Boolean = false
+
+    /**
+     * Показывать ли при первом запуске экран разрешений. На Android разрешения
+     * выдаются по одному системными окнами, и лучше спросить всё сразу, объяснив
+     * зачем; на iOS спрашивать нечего, кроме уведомлений, — там экрана нет.
+     */
+    val asksPermissions: Boolean get() = false
+
+    /** Разрешены ли уведомления (на Android 13+ это отдельное разрешение). */
+    fun notificationsGranted(): Boolean = true
+
+    /** Спросить разрешение на уведомления. */
+    suspend fun requestNotifications(): Boolean = true
+
     /** Сообщения за последние дни — чтобы разобрать уже пришедшее. */
     suspend fun readSmsHistory(days: Int): List<SmsMessage>
 

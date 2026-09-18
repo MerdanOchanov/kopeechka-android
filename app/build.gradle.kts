@@ -58,6 +58,9 @@ android {
             dimension = "store"
             // под этим именем приложение заведено в Play Console — поменять его там уже нельзя
             applicationId = "com.arassanusga.kopeechka"
+            // Автоматическое чтение СМС включим, когда Play одобрит декларацию разрешений
+            // (исключение «SMS-based money management»): тогда true и удалить
+            // app/src/play/AndroidManifest.xml. До тех пор СМС вставляют вручную.
             buildConfigField("boolean", "SMS_ENABLED", "false")
             buildConfigField("boolean", "UPDATES_FROM_GITHUB", "false")
         }

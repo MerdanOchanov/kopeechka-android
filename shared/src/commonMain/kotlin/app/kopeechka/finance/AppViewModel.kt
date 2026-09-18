@@ -304,6 +304,10 @@ class AppViewModel(
     var smsBusy by mutableStateOf(false)
         private set
 
+    /** Вставленный вручную текст сообщений и выбранное для них правило (null — подобрать само). */
+    var smsPaste by mutableStateOf("")
+    var smsPasteRule by mutableStateOf<String?>(null)
+
     /** Идёт обмен с другим участником. */
     var syncBusy by mutableStateOf(false)
         private set
@@ -466,6 +470,7 @@ class AppViewModel(
     /** Системная кнопка «назад»: закрывает верхний слой. false — слоёв нет, можно выходить. */
     fun back(): Boolean {
         when {
+            needPerms(store.current) -> finishPerms()
             confirm != null -> confirm = null
             inboxEdit != null -> inboxEdit = null
             statement != null -> statement = null
@@ -2054,6 +2059,59 @@ class AppViewModel(
 
     /** Разрешение выдают в системных настройках — спрашиваем при каждом показе экрана. */
     fun pushAccess() = platform.pushAccessGranted()
+
+    /**
+     * Разобрать вставленные сообщения. Несколько штук разделяют пустой строкой;
+     * повторная вставка того же сообщения дубля не создаст.
+     */
+    fun pasteSms() {
+        val text = smsPaste.trim()
+        if (text.isEmpty()) return
+        if (store.current.smsSources.none { it.enabled }) return say("sms.pasteNeedRule")
+        val rule = store.current.smsSources.firstOrNull { it.id == smsPasteRule }
+        val now = Clock.System.now().toEpochMilliseconds()
+        val parts = text.split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
+        val made = parts.count { SmsInbox.handlePasted(store, it, now, l, rule) != null }
+        if (made == 0) return say("sms.pasteNothing")
+        smsPaste = ""
+        say("sms.pasted", made)
+        if (store.current.inbox.isNotEmpty()) inboxOpen = true
+    }
+
+    // ——— разрешения при первом запуске ———
+
+    /** Экран разрешений: сразу после заставки, один раз. */
+    fun needPerms(d: AppData) = platform.asksPermissions && d.settings.onboarded && !d.settings.permsAsked
+
+    fun notificationsGranted() = platform.notificationsGranted()
+    fun smsGranted() = platform.smsGranted()
+
+    fun askNotifications() {
+        viewModelScope.launch { runCatching { platform.requestNotifications() } }
+    }
+
+    fun askSms() {
+        viewModelScope.launch {
+            if (runCatching { platform.requestSmsAccess() }.getOrDefault(false)) settings { it.copy(sms = true) } else say("sms.denied")
+        }
+    }
+
+    /** «Разрешить всё»: системные окна по очереди; доступ к уведомлениям банков — только через настройки. */
+    fun askAllPerms() {
+        viewModelScope.launch {
+            runCatching { platform.requestNotifications() }
+            if (platform.canReadSms && runCatching { platform.requestSmsAccess() }.getOrDefault(false)) {
+                settings { it.copy(sms = true) }
+            }
+        }
+    }
+
+    fun finishPerms() {
+        val push = platform.canReadPush && platform.pushAccessGranted()
+        settings { it.copy(permsAsked = true, bankPush = it.bankPush || push) }
+        // дальше читать не по чему, пока нет правила для своего банка
+        if (store.current.settings.sms && store.current.smsSources.isEmpty()) say("sms.on")
+    }
 
     /**
      * Включение ведёт в системные настройки доступа к уведомлениям: иначе

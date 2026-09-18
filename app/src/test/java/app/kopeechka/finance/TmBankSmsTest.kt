@@ -138,6 +138,20 @@ class TmBankSmsTest {
     }
 
     @Test
+    fun вставленное_сообщение_без_отправителя_и_с_датой_из_текста() {
+        val store = cashStore(auto = false)
+        val text = "Kartyn belgisi VISA Domestic MILLI *2099, boyunca amal E-commerce approved. Wagty 16.09.26 17:10. " +
+            "Pulyn mocberi: 200.00 TMT satyjy 4814 300000000000007, satyjyn ady: TMCELL,  Yurt: TKM. Pulyn galyndysy 501.71 TMT."
+        // «сейчас» — 18.09.2026, а операция была 16-го
+        val now = 1_789_732_800_000
+        assertNotNull(SmsInbox.handlePasted(store, text, now, Lang.RU))
+        val item = store.current.inbox.single()
+        assertEquals(200.0, item.amount, 0.001)
+        assertEquals(app.kopeechka.finance.data.localDateOrNull(2026, 9, 16)!!.toEpochDays().toLong(), item.date)
+        assertEquals("повторная вставка не плодит дубли", null, SmsInbox.handlePasted(store, text, now, Lang.RU))
+    }
+
+    @Test
     fun turkmenbasy_покупка_без_валюты() {
         val text = "17.09.2026 19:16 Sowda 115.00 ***6415 185360 TEL. GURBANOW A.B., TM galyndy 1050.41"
         val r = SmsParse.parse(text, rule("Türkmenbaşy"), "TMT")!!

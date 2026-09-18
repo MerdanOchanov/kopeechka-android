@@ -58,7 +58,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private val smsPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        host.platform.onPermissionResult(result.values.all { it })
+        // пустой ответ — окно закрыли, не ответив: это не согласие
+        host.platform.onPermissionResult(result.isNotEmpty() && result.values.all { it })
     }
 
     private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

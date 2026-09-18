@@ -7,12 +7,59 @@
 | `full` | `app.kopeechka.finance` | APK на GitHub, отладка на своём телефоне | все функции, включая чтение банковских СМС и проверку обновлений с GitHub |
 | `play` | `com.arassanusga.kopeechka` | Google Play | без чтения СМС (нет ни разрешений, ни приёмника, ни пункта в настройках) и без проверки обновлений — их доставляет Play |
 
-Почему `play` без СМС. Разрешения `READ_SMS` и `RECEIVE_SMS` Google Play пропускает
-только после одобренной **декларации разрешений** (Policy → App content →
-Sensitive permissions). Без неё выпуск с такими разрешениями не пройдёт проверку
-даже в закрытом тестировании. Если декларацию подадите и её одобрят, достаточно
-убрать `app/src/play/AndroidManifest.xml` и поставить `SMS_ENABLED = true`
-у варианта `play` в `app/build.gradle.kts`.
+Почему `play` пока без автоматического чтения СМС. Разрешения `READ_SMS`
+и `RECEIVE_SMS` Google Play пропускает только после одобренной **декларации
+разрешений**. Без неё выпуск с такими разрешениями не пройдёт проверку даже во
+внутреннем тестировании. До одобрения в варианте `play` работает **вставка СМС
+вручную** (Настройки → Банковские сообщения): правило подбирается по тексту,
+дата берётся из сообщения.
+
+### Как включить чтение СМС в Play
+
+1. Поставить `SMS_ENABLED = true` у варианта `play` в `app/build.gradle.kts`
+   и удалить `app/src/play/AndroidManifest.xml`. Экран разрешений первого запуска
+   сам начнёт спрашивать доступ к СМС с объяснением — Google этого требует.
+2. Поднять `versionCode`, собрать AAB и загрузить во **внутреннее тестирование**.
+   Play Console остановит выпуск и откроет **Контент приложения → Декларация
+   разрешений** (Permissions declaration form).
+3. Заполнить декларацию текстом ниже, приложить видео и отправить.
+   Проверка — обычно несколько дней.
+4. После одобрения опубликовать выпуск.
+
+### Текст декларации
+
+**Основная функция приложения:** «Учёт финансов и бюджета» — категория исключения
+*SMS-based money management* (приложения, которые помогают отслеживать и вести
+бюджет по банковским сообщениям).
+
+**Как приложение использует разрешения (EN, в форму):**
+
+```
+Kopeechka is a personal finance and budgeting app. Its core feature is automatic
+expense tracking from bank SMS: when the user's bank sends a transaction SMS
+(purchase, cash withdrawal, top-up), the app reads the amount, card digits and
+merchant and turns it into a draft transaction that the user confirms.
+
+RECEIVE_SMS is used to process new bank transaction messages as they arrive.
+READ_SMS is used once, when the user enables the feature, to import the last
+90 days of bank messages so the budget is complete from day one.
+
+Only messages from senders the user explicitly added as bank rules are processed.
+All parsing happens on the device; message text is never uploaded, never included
+in backups and never shared. The feature is off by default: the user turns it on
+in Settings, sees an explanation screen, and then the system permission dialog.
+Without the permission the app still works and offers manual paste of bank SMS.
+Many banks in Turkmenistan and other CIS countries send transaction details only
+by SMS, with no API or banking-app notifications, so SMS is the only way to track
+spending automatically.
+```
+
+**Видео (обязательно):** 30–60 секунд записи экрана, ссылка на YouTube (можно
+«доступ по ссылке»): Настройки → Ввод без рук → включить «Читать СМС банков» →
+экран объяснения → системное окно разрешения → правило банка → пришедшая СМС →
+черновик в «На проверку» → «Записать».
+
+**Политика конфиденциальности** — [PRIVACY.md](PRIVACY.md), раздел про СМС уже есть.
 
 Разница задаётся флагами `BuildConfig.SMS_ENABLED` и `UPDATES_FROM_GITHUB`, а манифест
 варианта `play` вычёркивает разрешения и приёмник через `tools:node="remove"`.

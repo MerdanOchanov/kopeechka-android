@@ -112,6 +112,7 @@ fun KopeechkaRoot(vm: AppViewModel, data: AppData, onEnableReminder: () -> Unit)
                 vm.inboxEdit?.let { InboxEditSheet(vm, calc, it) }
                 if (vm.scanSheet) ScanSourceSheet(vm)
                 if (vm.datePick != null) DateSheet(vm, calc, vm.pickedDate())
+                if (vm.needPerms(data)) PermissionsOverlay(vm)
             }
             vm.confirm?.let { ConfirmSheet(vm, it) }
             vm.toast?.let {

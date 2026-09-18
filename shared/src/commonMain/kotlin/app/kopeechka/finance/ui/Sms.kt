@@ -71,9 +71,25 @@ fun SmsPage(vm: AppViewModel, c: Calc) {
             }
         }
 
-        SectionTitle(l.t("sms.history"))
-        Muted(l.t("sms.historyNote"), 11.5f)
-        GhostButton(if (vm.smsBusy) l.t("sms.reading") else l.t("sms.importNow"), { if (!vm.smsBusy) vm.importSmsHistory() }, size = 13)
+        // вставка вручную: работает без разрешения на СМС и на iPhone
+        SectionTitle(l.t("sms.pasteTitle"))
+        Muted(l.t("sms.pasteNote"), 11.5f)
+        Field(null, vm.smsPaste, { vm.smsPaste = it }, minLines = 3, placeholder = l.t("sms.testHint"))
+        if (c.d.smsSources.size > 1) {
+            ChipFlow {
+                Chip(l.t("sms.pasteAuto"), vm.smsPasteRule == null, { vm.smsPasteRule = null })
+                c.d.smsSources.filter { it.enabled }.forEach { src ->
+                    Chip(src.name, vm.smsPasteRule == src.id, { vm.smsPasteRule = src.id })
+                }
+            }
+        }
+        PrimaryButton(l.t("sms.pasteGo"), { vm.pasteSms() }, Modifier.fillMaxWidth(), enabled = vm.smsPaste.isNotBlank())
+
+        if (vm.canReadSms) {
+            SectionTitle(l.t("sms.history"))
+            Muted(l.t("sms.historyNote"), 11.5f)
+            GhostButton(if (vm.smsBusy) l.t("sms.reading") else l.t("sms.importNow"), { if (!vm.smsBusy) vm.importSmsHistory() }, size = 13)
+        }
     }
 }
 

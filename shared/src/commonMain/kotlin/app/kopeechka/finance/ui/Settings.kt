@@ -165,9 +165,8 @@ fun SettingsScreen(vm: AppViewModel, c: Calc, onEnableReminder: () -> Unit) {
                     Toggle(s.sms) { vm.setSmsModule(it) }
                 }
             }
-            if (s.sms || s.bankPush) {
-                SecondaryButton(l.t("sms.openPage"), { vm.openPage(Page.SMS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
-            }
+            // правила нужны всегда: без чтения СМС сообщения можно вставлять вручную
+            SecondaryButton(l.t("sms.openPage"), { vm.openPage(Page.SMS) }, Modifier.fillMaxWidth(), size = 13, upper = true)
             NavRow(
                 Icons.Spark,
                 l.t("set.advisor"),

@@ -9,6 +9,7 @@ import app.kopeechka.finance.data.InboxItem
 import app.kopeechka.finance.data.Lang
 import app.kopeechka.finance.data.ParsedSms
 import app.kopeechka.finance.data.SmsParse
+import app.kopeechka.finance.data.SmsSource
 import app.kopeechka.finance.data.Tx
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
@@ -31,6 +32,26 @@ object SmsInbox {
         val d = store.current
         if (if (fromPush) !d.settings.bankPush else !d.settings.sms) return null
         val src = SmsParse.pick(d.smsSources, sender, text) ?: return null
+        return process(store, src, text, at, l, if (fromPush) INBOX_PUSH else INBOX_SMS, null)
+    }
+
+    /**
+     * Сообщение, скопированное и вставленное вручную. Работает без разрешения
+     * на чтение СМС — и на iPhone. Отправителя нет, поэтому правило подбирается
+     * по тексту (или его выбрал человек), а дата берётся из самого сообщения.
+     */
+    fun handlePasted(store: Storage, text: String, now: Long, l: Lang, rule: SmsSource? = null): SmsResult? {
+        val d = store.current
+        val src = rule ?: SmsParse.pickByText(d.smsSources, text) { s -> d.accounts.firstOrNull { it.id == s.accId }?.cur.orEmpty() }
+            ?: return null
+        val today = dayOf(now)
+        // дата из текста, если она правдоподобна: не из будущего и не старше года
+        val day = SmsParse.findDate(text)?.takeIf { it in (today - 366)..today } ?: today
+        return process(store, src, text, now, l, INBOX_SMS, day)
+    }
+
+    private fun process(store: Storage, src: SmsSource, text: String, at: Long, l: Lang, source: String, dayOverride: Long?): SmsResult? {
+        val d = store.current
         val acc = d.accounts.firstOrNull { it.id == src.accId } ?: return null
         val parsed = SmsParse.parse(text, src, acc.cur) ?: return null
 
@@ -43,7 +64,7 @@ object SmsInbox {
                 ?: acc
         }
 
-        val day = dayOf(at)
+        val day = dayOverride ?: dayOf(at)
         if (alreadyKnown(d, parsed, target.id, day)) return null
 
         val cat = guessCategory(d, parsed)
@@ -85,7 +106,7 @@ object SmsInbox {
                     inbox = listOf(
                         InboxItem(
                             id = s.nextId,
-                            source = if (fromPush) INBOX_PUSH else INBOX_SMS,
+                            source = source,
                             at = at,
                             date = day,
                             title = title,

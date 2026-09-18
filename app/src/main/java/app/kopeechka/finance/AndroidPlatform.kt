@@ -259,8 +259,24 @@ class AndroidPlatform(private val ctx: Context) : Platform {
 
     // ——— банковские СМС ———
 
-    /** В сборке для Google Play чтения СМС нет — см. app/build.gradle.kts. */
+    /** Флаг сборки — см. app/build.gradle.kts. */
     override val canReadSms = BuildConfig.SMS_ENABLED
+
+    override val asksPermissions = true
+
+    override fun smsGranted() = canReadSms && smsAllowed()
+
+    override fun notificationsGranted(): Boolean =
+        android.os.Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    override suspend fun requestNotifications(): Boolean {
+        if (notificationsGranted()) return true
+        val waiter = CompletableDeferred<Boolean>()
+        pendingPermission = waiter
+        permissionRequests.emit(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+        return waiter.await()
+    }
 
     override suspend fun requestSmsAccess(): Boolean {
         if (!canReadSms) return false

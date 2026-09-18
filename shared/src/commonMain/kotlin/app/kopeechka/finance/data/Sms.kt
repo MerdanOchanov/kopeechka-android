@@ -91,6 +91,20 @@ object SmsParse {
             ?: own.firstOrNull { it.cardMask.isBlank() }
     }
 
+    /**
+     * Правило для вставленного вручную сообщения — отправителя тогда нет.
+     * Сначала правило, чьи цифры карты есть в тексте, потом первое, которое
+     * вообще узнало в тексте сумму.
+     */
+    fun pickByText(sources: List<SmsSource>, text: String, curOf: (SmsSource) -> String): SmsSource? {
+        val on = sources.filter { it.enabled }
+        return on.firstOrNull { it.cardMask.isNotBlank() && hasCard(text, it.cardMask) && parse(text, it, curOf(it)) != null }
+            ?: on.firstOrNull { it.cardMask.isBlank() && parse(text, it, curOf(it)) != null }
+    }
+
+    /** Дата операции из текста: «16.09.26 17:10», «17.09.2026». null — даты нет. */
+    fun findDate(text: String): Long? = Statement.date(text)
+
     /** Четыре цифры стоят в тексте отдельно: не часть суммы или другого номера. */
     fun hasCard(text: String, mask: String): Boolean {
         val m = mask.filter { it.isDigit() }.takeLast(4)
