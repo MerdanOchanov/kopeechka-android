@@ -22,7 +22,7 @@ android {
         minSdk = 26
         // Google Play с 2026 года принимает только targetSdk 36 и выше; держим самый свежий
         targetSdk = 37
-        versionCode = 10
+        versionCode = 11
         versionName = "1.8"
     }
 
