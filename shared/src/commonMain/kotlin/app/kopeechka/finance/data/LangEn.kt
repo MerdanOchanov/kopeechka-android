@@ -188,6 +188,9 @@ internal val EN_STRINGS: Map<String, String> = mapOf(
     "acc.type.cash" to "Wallet",
     "acc.type.savings" to "Savings",
     "acc.type.deposit" to "Deposit",
+    "acc.type.gold" to "Gold",
+    "acc.goldNote" to "Balance is in grams. Gold counts towards the total at the price per gram in {0} — adjust it in Settings → Currencies.",
+    "cur.perGram" to "price per gram",
     "acc.type.other" to "Other",
     "acc.short" to "AC",
 

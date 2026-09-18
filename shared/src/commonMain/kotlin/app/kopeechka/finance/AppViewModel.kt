@@ -918,11 +918,33 @@ class AppViewModel(
         )
     }
 
+    /** Тип «Золото» сам переключает счёт на граммы; уход с него — обратно на основную валюту. */
+    fun pickAccType(key: String) {
+        val e = accEdit ?: return
+        val gold = key == "acc.type.gold"
+        val cur = when {
+            e.id != null -> e.cur
+            gold -> Currencies.GOLD
+            e.cur == Currencies.GOLD -> store.current.settings.mainCur
+            else -> e.cur
+        }
+        accEdit = e.copy(type = l.t(key), cur = cur)
+    }
+
     fun saveAcc() {
         val e = accEdit ?: return
         val name = e.name.trim()
         if (name.isEmpty()) return say("msg.enterAccName")
         val bal = e.balance.replace(',', '.').replace(" ", "").toDoubleOrNull() ?: 0.0
+        if (e.id == null && e.cur !in store.current.settings.currencyCodes) {
+            // золото включается само: без курса граммы не попадут в общий итог
+            settings { s ->
+                s.copy(
+                    currencyCodes = (s.currencyCodes + e.cur).distinct(),
+                    rates = if (s.rates.containsKey(e.cur)) s.rates else s.rates + (e.cur to Currencies.hintRate(e.cur, s.mainCur)),
+                )
+            }
+        }
         store.update { s ->
             if (e.id == null) {
                 s.copy(

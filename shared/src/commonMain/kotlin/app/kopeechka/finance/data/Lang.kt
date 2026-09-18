@@ -272,6 +272,9 @@ internal val RU_STRINGS: Map<String, String> = mapOf(
     "acc.type.cash" to "Кошелёк",
     "acc.type.savings" to "Накопления",
     "acc.type.deposit" to "Вклад",
+    "acc.type.gold" to "Золото",
+    "acc.goldNote" to "Остаток — в граммах. В общий итог золото попадает по цене грамма в {0} — её можно поправить в «Настройки → Валюты».",
+    "cur.perGram" to "цена за грамм",
     "acc.type.other" to "Другое",
     "acc.short" to "СЧ",
 

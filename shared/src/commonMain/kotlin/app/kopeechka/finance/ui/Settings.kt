@@ -353,6 +353,7 @@ fun CurrenciesPage(vm: AppViewModel, c: Calc) {
                                 buildList {
                                     add(code)
                                     if (code == c.main) add(l.t("cur.main"))
+                                    if (code == Currencies.GOLD) add(l.t("cur.perGram"))
                                     if (used > 0) add(l.t("cur.usedIn", l.n(used, "place")))
                                     if (!Currencies.inCatalog(code)) add(l.t("cur.own"))
                                 }.joinToString(" · "),

@@ -34,6 +34,15 @@ class RatesTest {
     }
 
     @Test
+    fun золото_в_граммах_входит_в_итог_по_цене_грамма() {
+        val d = AppData(
+            accounts = listOf(Account(id = "gold", name = "Золото", cur = "XAU", initial = 12.5)),
+            settings = tm.copy(rates = tm.rates + ("XAU" to 400.0)),
+        )
+        near(5000.0, Calc(d).totalMain, "12,5 г по 400 манат за грамм")
+    }
+
+    @Test
     fun без_рыночного_курса_валюта_считается_по_банку() {
         val c = Calc(AppData(settings = tm.copy(rateMode = RateMode.MARKET)))
         near(0.0385, c.rate("RUB"), "у рубля рыночного курса нет — берётся банковский")

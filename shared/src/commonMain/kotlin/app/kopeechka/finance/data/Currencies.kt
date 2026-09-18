@@ -40,6 +40,13 @@ object Currencies {
      */
     const val HINT_BASE = "USD"
 
+    /**
+     * Золото в граммах. В Средней Азии и на Кавказе сбережения часто держат
+     * в украшениях и слитках — это такой же счёт, только «валюта» — грамм,
+     * а курс — цена грамма в основной валюте.
+     */
+    const val GOLD = "XAU"
+
     /** Версия формата: 3 — курсы и лимиты в основной валюте (1 — в рублях, 2 — в долларах). */
     const val DATA_VERSION = 3
 
@@ -122,6 +129,7 @@ object Currencies {
         Info("OMR", "OMR", "оманские риалы", "риалах", "Omani rial"),
         Info("LBP", "LBP", "ливанские фунты", "фунтах", "Lebanese pounds"),
         Info("AFN", "AFN", "афганские афгани", "афгани", "Afghan afghani", "owgan afganisi"),
+        Info(GOLD, "g", "золото, граммы", "граммах золота", "gold, grams", "altyn, gram"),
     )
 
     /**
@@ -144,6 +152,8 @@ object Currencies {
         "MNT" to 0.000293, "PHP" to 0.0174, "TWD" to 0.0315, "IRR" to 0.000022, "IQD" to 0.000761,
         "JOD" to 1.413, "KWD" to 3.261, "BHD" to 2.652, "OMR" to 2.598, "LBP" to 0.000011,
         "AFN" to 0.0141,
+        // цена грамма золота в долларах — только стартовое значение
+        GOLD to 110.0,
     )
 
     private val byCode = CATALOG.associateBy { it.code }
@@ -200,7 +210,8 @@ object Currencies {
 
     /** 112 480 ₽ — без знака, модуль берёт вызывающий. */
     fun fmt(v: Double, cur: String, kopecks: Boolean = false): String {
-        val n = if (kopecks) groupDecimal(v, groupSep, decimalSep) else groupNumber(v.roundToLong(), groupSep)
+        // граммы золота без дробной части теряют смысл: 12,5 г — не 13 г
+        val n = if (kopecks || cur == GOLD) groupDecimal(v, groupSep, decimalSep) else groupNumber(v.roundToLong(), groupSep)
         return n + " " + sym(cur)
     }
 

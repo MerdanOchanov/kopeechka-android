@@ -192,6 +192,9 @@ internal val TK_STRINGS: Map<String, String> = mapOf(
     "acc.type.cash" to "Gapjyk",
     "acc.type.savings" to "Ýygnym",
     "acc.type.deposit" to "Goýum",
+    "acc.type.gold" to "Altyn",
+    "acc.goldNote" to "Galyndy gramda. Altyn jemi hasaba bir gramyň {0} bahasy boýunça goşulýar — ony «Sazlamalar → Walýutalar» bölüminde üýtgedip bolýar.",
+    "cur.perGram" to "bir gramyň bahasy",
     "acc.type.other" to "Başga",
     "acc.short" to "HS",
 

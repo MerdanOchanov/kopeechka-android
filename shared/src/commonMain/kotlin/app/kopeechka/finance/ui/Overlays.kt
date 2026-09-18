@@ -406,7 +406,7 @@ fun CurrencyPickerOverlay(vm: AppViewModel, c: Calc) {
 @Composable
 fun AccEditOverlay(vm: AppViewModel, c: Calc, e: AccEdit) {
     val l = T.l
-    val types = listOf("acc.type.card", "acc.type.cash", "acc.type.savings", "acc.type.deposit", "acc.type.other")
+    val types = listOf("acc.type.card", "acc.type.cash", "acc.type.savings", "acc.type.deposit", "acc.type.gold", "acc.type.other")
     OverlayScreen(
         if (e.id == null) l.t("acc.new") else l.t("acc.one"),
         l.t("common.cancel"),
@@ -419,14 +419,16 @@ fun AccEditOverlay(vm: AppViewModel, c: Calc, e: AccEdit) {
             ChipFlow {
                 types.forEach { key ->
                     val label = l.t(key)
-                    Chip(label, e.type == label, { vm.accEdit = e.copy(type = label) })
+                    Chip(label, e.type == label, { vm.pickAccType(key) })
                 }
             }
         }
         Field(l.t("acc.mask"), e.mask, { vm.accEdit = e.copy(mask = it) }, placeholder = l.t("acc.maskHint"))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Kicker(l.t("acc.cur"))
-            if (e.id == null) {
+            if (e.id == null && e.cur == Currencies.GOLD) {
+                Muted(l.t("acc.goldNote", Currencies.sym(c.main)), 11.5f)
+            } else if (e.id == null) {
                 CurrencyGrid(c.currencies, e.cur) { vm.accEdit = e.copy(cur = it) }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
